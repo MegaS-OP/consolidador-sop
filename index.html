@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Consolidador S&OP</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%232E9150'/%3E%3Ctext x='50' y='68' font-size='58' text-anchor='middle' fill='white' font-family='sans-serif'%3ES%3C/text%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-brand">
+      <span class="brand-mark">S&amp;OP</span>
+      <span class="brand-name">Consolidador de informes de planta</span>
+    </div>
+    <div id="topbarActions" class="topbar-actions" hidden>
+      <label class="field-inline">
+        <span>Mes / Año</span>
+        <input id="mesAnioInput" type="text" placeholder="Septiembre 2026" />
+      </label>
+      <button id="btnGenerar" class="btn btn-primary" disabled>Generar consolidado</button>
+    </div>
+  </header>
+
+  <main id="app">
+    <!-- ============ PANTALLA 1: CARGA ============ -->
+    <section id="screenUpload" class="screen">
+      <div class="upload-intro">
+        <h1>Subí los informes de planta</h1>
+        <p>Arrastrá hasta 8 archivos .pptx (uno por planta). Después vas a poder revisar la clasificación y el orden antes de generar el consolidado.</p>
+      </div>
+
+      <div id="dropzone" class="dropzone">
+        <div class="dropzone-icon">＋</div>
+        <p class="dropzone-title">Soltá los archivos acá</p>
+        <p class="dropzone-sub">o hacé clic para elegirlos — .pptx, hasta 8 archivos</p>
+        <input id="fileInput" type="file" accept=".pptx" multiple hidden />
+      </div>
+
+      <div id="fileList" class="file-list" aria-live="polite"></div>
+
+      <div id="uploadErrors" class="alert alert-error" hidden></div>
+
+      <div class="upload-cta">
+        <button id="btnContinuar" class="btn btn-primary" disabled>Continuar a revisión</button>
+      </div>
+    </section>
+
+    <!-- ============ PANTALLA 2: TABLERO DE REVISIÓN ============ -->
+    <section id="screenBoard" class="screen" hidden>
+      <div class="board-toolbar">
+        <div class="plant-order">
+          <span class="plant-order-label">Orden de plantas en el consolidado</span>
+          <div id="plantChips" class="plant-chips"></div>
+        </div>
+        <div class="board-legend">
+          <span class="legend-item"><i class="dot dot-alta"></i>Confianza alta</span>
+          <span class="legend-item"><i class="dot dot-dudosa"></i>Dudosa</span>
+          <span class="legend-item"><i class="dot dot-sin"></i>Sin clasificar</span>
+        </div>
+      </div>
+
+      <div id="boardWarnings" class="alert alert-warning" hidden></div>
+
+      <div id="board" class="board"></div>
+    </section>
+
+    <!-- ============ PANTALLA 3: GENERACIÓN ============ -->
+    <section id="screenGenerating" class="screen" hidden>
+      <div class="generating-box">
+        <div class="spinner" aria-hidden="true"></div>
+        <p id="generatingStatus">Generando el consolidado…</p>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="vendor/jszip.min.js"></script>
+  <script src="js/ooxml-utils.js"></script>
+  <script src="js/template.js"></script>
+  <script src="js/pptx-merger.js"></script>
+  <script src="js/pptx-parser.js"></script>
+  <script src="js/classifier.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
