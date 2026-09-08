@@ -100,6 +100,15 @@ Sitio estático (HTML/CSS/JS, sin build step) para desplegar en Netlify.
   extensivamente con ese tipo de contenido, así que conviene revisar el
   resultado si alguna planta usa gráficos nativos de PowerPoint (no
   imágenes pegadas).
+- **Objetos OLE embebidos** (gráficos de think-cell, hojas de Excel
+  incrustadas, etc.) se convierten a imagen fija en vez de copiarse como
+  objeto embebido — a propósito: son el motivo más común de que un
+  antivirus/filtro de adjuntos corporativo (visto en producción: Check
+  Point Harmony Endpoint) reconstruya el `.pptx` al descargarlo, dejando el
+  archivo corrupto. El resultado se ve igual, pero deja de ser editable
+  como objeto (nadie necesita editar esos gráficos desde un consolidado de
+  sólo lectura). Si el patrón interno del objeto no es el esperado, se dejan
+  sin tocar en vez de arriesgar un archivo inválido.
 - Al generar, la herramienta avisa (con un mensaje) si encontró algo que no
   pudo copiar del todo — revisar la consola del navegador para el detalle.
 
