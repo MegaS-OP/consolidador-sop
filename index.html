@@ -30,7 +30,7 @@
     <section id="screenUpload" class="screen">
       <div class="upload-intro">
         <h1>Subí los informes de planta</h1>
-        <p>Arrastrá hasta 8 archivos .pptx (uno por planta). Después vas a poder revisar la clasificación y el orden antes de generar el consolidado.</p>
+        <p>Arrastrá hasta 8 archivos .pptx (uno por planta). Después vas a poder revisar y excluir diapositivas antes de generar el consolidado.</p>
       </div>
 
       <div id="dropzone" class="dropzone">
@@ -58,9 +58,7 @@
         </div>
       </div>
 
-      <div id="boardWarnings" class="alert alert-warning" hidden></div>
-
-      <div id="board" class="plant-groups"></div>
+      <div id="board" class="board-columns"></div>
     </section>
 
     <!-- ============ PANTALLA 3: GENERACIÓN ============ -->
@@ -79,7 +77,6 @@
   <script src="js/template.js"></script>
   <script src="js/pptx-merger.js"></script>
   <script src="js/pptx-parser.js"></script>
-  <script src="js/classifier.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

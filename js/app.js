@@ -2,21 +2,11 @@
   'use strict';
 
   const MAX_PLANTS = 8;
-  // Etiquetas cortas para los chips de sección de cada tarjeta (las de
-  // Classifier.SECTIONS son más largas, pensadas como encabezado).
-  const SECTION_CHIP_LABELS = {
-    bo: 'BO / Críticos',
-    faltantes: 'Faltantes',
-    lanzamientos: 'Lanzamientos',
-    temas: 'Temas pendientes',
-    kpis: 'KPIs',
-  };
-  const CHIP_OPTIONS = [...Classifier.SECTIONS.map((s) => ({ id: s.id, label: SECTION_CHIP_LABELS[s.id] || s.label })), { id: null, label: 'Sin clasificar' }];
 
   const state = {
     plants: [], // { id, fileName, label, zip, slides: [...], error }
     plantOrder: [], // ids, orden final en el consolidado
-    slides: [], // vista plana: { uid, plantId, slidePath, title, thumbnail, sectionId, confidence, excluded, orderIndex }
+    slides: [], // vista plana: { uid, plantId, slidePath, title, thumbnail, excluded, orderIndex }
   };
 
   let nextUid = 1;
@@ -178,15 +168,12 @@
     state.slides = [];
     for (const plant of okPlants) {
       plant.slides.forEach((s, i) => {
-        const cls = Classifier.classifySlide(s.title, s.fullText);
         state.slides.push({
           uid: 'slide' + nextUid++,
           plantId: plant.id,
           slidePath: s.slidePath,
           title: s.title,
           thumbnail: s.thumbnail,
-          sectionId: cls.sectionId,
-          confidence: cls.confidence,
           excluded: false,
           orderIndex: i,
         });
@@ -245,17 +232,17 @@
         .filter((s) => s.plantId === pid)
         .sort((a, b) => a.orderIndex - b.orderIndex);
 
-      const group = document.createElement('div');
-      group.className = 'plant-group';
-      group.innerHTML = `<div class="plant-group-header">${escapeHtml(plant.label)}<span class="plant-group-count">${slidesOfPlant.length} diapositivas</span></div>`;
+      const col = document.createElement('div');
+      col.className = 'plant-column';
+      col.innerHTML = `<div class="plant-column-header">${escapeHtml(plant.label)}<span class="plant-column-count">${slidesOfPlant.length}</span></div>`;
 
       const list = document.createElement('div');
-      list.className = 'slide-list';
+      list.className = 'plant-column-list';
       for (const slide of slidesOfPlant) {
         list.appendChild(renderCard(slide));
       }
-      group.appendChild(list);
-      boardEl.appendChild(group);
+      col.appendChild(list);
+      boardEl.appendChild(col);
     }
 
     updateGenerateButtonState();
@@ -263,34 +250,20 @@
 
   function renderCard(slide) {
     const card = document.createElement('div');
-    card.className = `card${slide.excluded ? ' excluded' : ''}`;
+    card.className = `mini-card${slide.excluded ? ' excluded' : ''}`;
     card.dataset.uid = slide.uid;
 
     const thumbHtml = slide.thumbnail
       ? `<img src="${slide.thumbnail}" alt="" />`
       : 'sin vista previa';
 
-    const chipsHtml = CHIP_OPTIONS.map(
-      (opt) =>
-        `<button type="button" class="section-chip${slide.sectionId === opt.id ? ' active' : ''}" data-section="${opt.id === null ? '' : opt.id}">${escapeHtml(opt.label)}</button>`
-    ).join('');
-
     card.innerHTML = `
-      <div class="card-thumb">${thumbHtml}</div>
-      <div class="card-body">
-        <div class="card-title">${escapeHtml(slide.title)}</div>
-        <div class="section-chip-row">${chipsHtml}</div>
-      </div>
-      <button class="card-exclude" title="${slide.excluded ? 'Incluir de nuevo' : 'Excluir del consolidado'}">${slide.excluded ? '↺' : '×'}</button>
+      <button class="mini-card-exclude" title="${slide.excluded ? 'Incluir de nuevo' : 'Excluir del consolidado'}">${slide.excluded ? '↺' : '×'}</button>
+      <div class="mini-card-thumb">${thumbHtml}</div>
+      <div class="mini-card-title">${escapeHtml(slide.title)}</div>
     `;
 
-    card.querySelectorAll('.section-chip').forEach((chipEl) => {
-      chipEl.addEventListener('click', () => {
-        slide.sectionId = chipEl.dataset.section || null;
-        renderBoard();
-      });
-    });
-    card.querySelector('.card-exclude').addEventListener('click', () => {
+    card.querySelector('.mini-card-exclude').addEventListener('click', () => {
       slide.excluded = !slide.excluded;
       renderBoard();
     });
@@ -303,7 +276,7 @@
   mesAnioInput.addEventListener('input', updateGenerateButtonState);
 
   function updateGenerateButtonState() {
-    const hasAnySlide = state.slides.some((s) => !s.excluded && s.sectionId !== null);
+    const hasAnySlide = state.slides.some((s) => !s.excluded);
     btnGenerar.disabled = !hasAnySlide || !mesAnioInput.value.trim();
   }
 
@@ -318,14 +291,6 @@
   async function generateConsolidated() {
     const mesAnio = mesAnioInput.value.trim();
     if (!mesAnio) return;
-
-    const unclassifiedCount = state.slides.filter((s) => !s.excluded && s.sectionId === null).length;
-    if (unclassifiedCount > 0) {
-      const proceed = confirm(
-        `Hay ${unclassifiedCount} diapositiva(s) "Sin clasificar" que NO se van a incluir en el consolidado. ¿Continuar de todas formas?`
-      );
-      if (!proceed) return;
-    }
 
     setScreen('Generating');
     const statusEl = $('#generatingStatus');
@@ -350,7 +315,6 @@
       await builder.addPortada(mesAnio);
 
       const labels = state.plantOrder.map((pid) => plantById(pid).label);
-      const sectionOrder = Classifier.SECTIONS.map((s) => s.id);
 
       for (let i = 0; i < state.plantOrder.length; i++) {
         const pid = state.plantOrder[i];
@@ -359,13 +323,8 @@
         await builder.addDivider(labels, i, i);
 
         const plantSlides = state.slides
-          .filter((s) => s.plantId === pid && !s.excluded && s.sectionId !== null)
-          .sort((a, b) => {
-            const sa = sectionOrder.indexOf(a.sectionId);
-            const sb = sectionOrder.indexOf(b.sectionId);
-            if (sa !== sb) return sa - sb;
-            return a.orderIndex - b.orderIndex;
-          });
+          .filter((s) => s.plantId === pid && !s.excluded)
+          .sort((a, b) => a.orderIndex - b.orderIndex);
 
         for (const slide of plantSlides) {
           await builder.addPlantSlide(pid, slide.slidePath);
