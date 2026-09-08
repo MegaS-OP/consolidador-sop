@@ -2,7 +2,16 @@
   'use strict';
 
   const MAX_PLANTS = 8;
-  const SECTION_COLUMNS = [...Classifier.SECTIONS.map((s) => ({ id: s.id, label: s.label })), { id: null, label: 'Sin clasificar' }];
+  // Etiquetas cortas para los chips de sección de cada tarjeta (las de
+  // Classifier.SECTIONS son más largas, pensadas como encabezado).
+  const SECTION_CHIP_LABELS = {
+    bo: 'BO / Críticos',
+    faltantes: 'Faltantes',
+    lanzamientos: 'Lanzamientos',
+    temas: 'Temas pendientes',
+    kpis: 'KPIs',
+  };
+  const CHIP_OPTIONS = [...Classifier.SECTIONS.map((s) => ({ id: s.id, label: SECTION_CHIP_LABELS[s.id] || s.label })), { id: null, label: 'Sin clasificar' }];
 
   const state = {
     plants: [], // { id, fileName, label, zip, slides: [...], error }
@@ -230,81 +239,58 @@
     const boardEl = $('#board');
     boardEl.innerHTML = '';
 
-    for (const col of SECTION_COLUMNS) {
-      const colEl = document.createElement('div');
-      colEl.className = 'column';
-      colEl.dataset.sectionId = col.id === null ? '' : col.id;
+    for (const pid of state.plantOrder) {
+      const plant = plantById(pid);
+      const slidesOfPlant = state.slides
+        .filter((s) => s.plantId === pid)
+        .sort((a, b) => a.orderIndex - b.orderIndex);
 
-      const slidesInCol = state.slides.filter((s) => s.sectionId === col.id);
-      // Orden estable dentro de la columna: por planta (según plantOrder) y luego por orden original.
-      slidesInCol.sort((a, b) => {
-        const ia = state.plantOrder.indexOf(a.plantId);
-        const ib = state.plantOrder.indexOf(b.plantId);
-        if (ia !== ib) return ia - ib;
-        return a.orderIndex - b.orderIndex;
-      });
+      const group = document.createElement('div');
+      group.className = 'plant-group';
+      group.innerHTML = `<div class="plant-group-header">${escapeHtml(plant.label)}<span class="plant-group-count">${slidesOfPlant.length} diapositivas</span></div>`;
 
-      colEl.innerHTML = `<div class="column-header">${escapeHtml(col.label)}<span class="column-count">${slidesInCol.length}</span></div>`;
-
-      if (!slidesInCol.length) {
-        const empty = document.createElement('div');
-        empty.className = 'column-empty';
-        empty.textContent = 'Arrastrá diapositivas acá';
-        colEl.appendChild(empty);
+      const list = document.createElement('div');
+      list.className = 'slide-list';
+      for (const slide of slidesOfPlant) {
+        list.appendChild(renderCard(slide));
       }
-
-      for (const slide of slidesInCol) {
-        colEl.appendChild(renderCard(slide));
-      }
-
-      colEl.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        colEl.classList.add('dragover');
-      });
-      colEl.addEventListener('dragleave', () => colEl.classList.remove('dragover'));
-      colEl.addEventListener('drop', (e) => {
-        e.preventDefault();
-        colEl.classList.remove('dragover');
-        const uid = e.dataTransfer.getData('text/slide-uid');
-        const slide = state.slides.find((s) => s.uid === uid);
-        if (!slide) return;
-        slide.sectionId = col.id;
-        renderBoard();
-      });
-
-      boardEl.appendChild(colEl);
+      group.appendChild(list);
+      boardEl.appendChild(group);
     }
 
     updateGenerateButtonState();
   }
 
   function renderCard(slide) {
-    const plant = plantById(slide.plantId);
     const card = document.createElement('div');
-    card.className = `card conf-${slide.confidence === 'alta' ? 'alta' : slide.confidence === 'dudosa' ? 'dudosa' : 'sin'}${slide.excluded ? ' excluded' : ''}`;
-    card.draggable = true;
+    card.className = `card${slide.excluded ? ' excluded' : ''}`;
     card.dataset.uid = slide.uid;
 
     const thumbHtml = slide.thumbnail
       ? `<img src="${slide.thumbnail}" alt="" />`
       : 'sin vista previa';
 
+    const chipsHtml = CHIP_OPTIONS.map(
+      (opt) =>
+        `<button type="button" class="section-chip${slide.sectionId === opt.id ? ' active' : ''}" data-section="${opt.id === null ? '' : opt.id}">${escapeHtml(opt.label)}</button>`
+    ).join('');
+
     card.innerHTML = `
       <div class="card-thumb">${thumbHtml}</div>
-      <div class="card-title">${escapeHtml(slide.title)}</div>
-      <div class="card-footer">
-        <span class="card-plant" title="${escapeHtml(plant.label)}">${escapeHtml(plant.label)}</span>
-        <button class="card-exclude" title="${slide.excluded ? 'Incluir de nuevo' : 'Excluir del consolidado'}">${slide.excluded ? '↺' : '×'}</button>
+      <div class="card-body">
+        <div class="card-title">${escapeHtml(slide.title)}</div>
+        <div class="section-chip-row">${chipsHtml}</div>
       </div>
+      <button class="card-exclude" title="${slide.excluded ? 'Incluir de nuevo' : 'Excluir del consolidado'}">${slide.excluded ? '↺' : '×'}</button>
     `;
 
-    card.addEventListener('dragstart', (e) => {
-      card.classList.add('dragging');
-      e.dataTransfer.setData('text/slide-uid', slide.uid);
+    card.querySelectorAll('.section-chip').forEach((chipEl) => {
+      chipEl.addEventListener('click', () => {
+        slide.sectionId = chipEl.dataset.section || null;
+        renderBoard();
+      });
     });
-    card.addEventListener('dragend', () => card.classList.remove('dragging'));
-    card.querySelector('.card-exclude').addEventListener('click', (e) => {
-      e.stopPropagation();
+    card.querySelector('.card-exclude').addEventListener('click', () => {
       slide.excluded = !slide.excluded;
       renderBoard();
     });

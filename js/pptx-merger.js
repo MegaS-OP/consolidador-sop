@@ -217,13 +217,28 @@
         this.contentTypeOverrides.set(newPath, origOverride);
         return;
       }
-      const fromSource = meta.contentTypes.defaults.get(ext);
-      const ct = fromSource || OoxmlUtils.FALLBACK_DEFAULTS[ext];
-      if (ct) {
-        this.contentTypeDefaultExts.set(ext, ct);
-      } else {
+
+      // Extensiones genuinamente inequívocas (una imagen .png siempre es
+      // image/png en cualquier paquete OOXML): se pueden declarar como
+      // Default global sin riesgo.
+      const universalCt = OoxmlUtils.FALLBACK_DEFAULTS[ext];
+      if (universalCt && ext !== 'bin') {
+        this.contentTypeDefaultExts.set(ext, universalCt);
+        return;
+      }
+
+      // Todo lo demás (".bin" en particular: puede ser un objeto OLE en
+      // una planta y otra cosa distinta en otra) se resuelve con el
+      // [Content_Types].xml de ESA fuente puntual, pero se declara como
+      // Override específico de esta parte — nunca como Default global —
+      // para no pisar el tipo correcto de un archivo con la misma
+      // extensión que venga de otra planta.
+      const fromSource = meta.contentTypes.defaults.get(ext) || meta.contentTypes.overrides.get(ext);
+      const ct = fromSource || universalCt || 'application/octet-stream';
+      this.contentTypeOverrides.set(newPath, ct);
+      if (!fromSource && !universalCt) {
         this.warnings.push(
-          `Tipo de contenido desconocido para ".${ext}" (${origPath}); el archivo final podría no abrir esa parte correctamente.`
+          `Tipo de contenido desconocido para ".${ext}" (${origPath}); se usó un tipo genérico, revisar esa diapositiva en el resultado final.`
         );
       }
     }
@@ -296,7 +311,9 @@
         ctParts.push(`<Default Extension="${ext}" ContentType="${OoxmlUtils.encodeXmlAttr(ct)}"/>`);
       }
       ctParts.push(
-        '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>'
+        '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>',
+        '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>',
+        '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>'
       );
       for (const [path, ct] of this.contentTypeOverrides) {
         ctParts.push(`<Override PartName="/${path}" ContentType="${OoxmlUtils.encodeXmlAttr(ct)}"/>`);
@@ -304,11 +321,44 @@
       ctParts.push('</Types>');
       this.outZip.file('[Content_Types].xml', ctParts.join(''));
 
+      // docProps/core.xml y app.xml: metadata estándar que todo .pptx
+      // generado por PowerPoint incluye. Sin esto, algunos filtros de
+      // seguridad de correo/descarga (los que renombran el archivo a
+      // "*.cleaned.pptx" al "limpiarlo") pueden no reconocer el paquete
+      // como un Office válido y corromperlo al reescribirlo.
+      const nowIso = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+      this.outZip.file(
+        'docProps/core.xml',
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n' +
+          '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" ' +
+          'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" ' +
+          'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
+          '<dc:title>Informe S&amp;OP Consolidado</dc:title>' +
+          '<dc:creator>Consolidador S&amp;OP</dc:creator>' +
+          '<cp:lastModifiedBy>Consolidador S&amp;OP</cp:lastModifiedBy>' +
+          `<dcterms:created xsi:type="dcterms:W3CDTF">${nowIso}</dcterms:created>` +
+          `<dcterms:modified xsi:type="dcterms:W3CDTF">${nowIso}</dcterms:modified>` +
+          '</cp:coreProperties>'
+      );
+      this.outZip.file(
+        'docProps/app.xml',
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n' +
+          '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" ' +
+          'xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">' +
+          '<Application>Consolidador S&amp;OP</Application>' +
+          '<PresentationFormat>Widescreen</PresentationFormat>' +
+          `<Slides>${this.sldIdEntries.length}</Slides>` +
+          '<Company>Megalabs</Company>' +
+          '</Properties>'
+      );
+
       this.outZip.file(
         '_rels/.rels',
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n' +
           `<Relationships xmlns="${OoxmlUtils.RELS_NS}">` +
           `<Relationship Id="rId1" Type="${OoxmlUtils.REL}/officeDocument" Target="ppt/presentation.xml"/>` +
+          `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>` +
+          `<Relationship Id="rId3" Type="${OoxmlUtils.REL}/extended-properties" Target="docProps/app.xml"/>` +
           '</Relationships>'
       );
 
