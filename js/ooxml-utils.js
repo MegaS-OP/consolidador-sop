@@ -15,11 +15,21 @@ const RELS_NS =
   'http://schemas.openxmlformats.org/package/2006/relationships';
 const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 
-// Tipos de relación que nunca se copian al consolidado: notas del orador,
-// comentarios, y metadata colaborativa de Office 365 que no aporta nada al
-// documento final y que además referencia partes con IDs que no vamos a
-// mantener sincronizados.
-const EXCLUDED_REL_TYPE_SUBSTR = ['notesSlide', 'notesMaster', 'tags', 'comment'];
+// Tipos de relación que nunca se copian al consolidado: notas del orador.
+// Son las únicas que se pueden excluir con seguridad, porque la relación
+// que las declara vive solo en el .rels de la parte dueña — nada dentro
+// del XML de la diapositiva/layout/master las referencia por r:id.
+//
+// OJO: "tags" (<p:tags r:id="..."/>, metadata de objeto muy común en
+// decks exportados de Google Slides) y los comentarios modernos SÍ pueden
+// quedar referenciados por r:id desde adentro del propio contenido (p.ej.
+// <p:nvPr><p:custDataLst><p:tags r:id="rId1"/>...). Si se excluye esa
+// relación pero no esa referencia inline, el archivo final queda con un
+// r:id apuntando a nada — exactamente el tipo de corrupción que PowerPoint
+// rechaza al abrir aunque el .zip y el XML sean válidos. Por eso NO se
+// excluyen: es más seguro copiar ese archivito de metadata de más que
+// dejar una referencia colgando.
+const EXCLUDED_REL_TYPE_SUBSTR = ['notesSlide', 'notesMaster'];
 
 function normalizePath(path) {
   const parts = path.split('/');
