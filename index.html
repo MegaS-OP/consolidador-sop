@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/styles.css?v=3" />
 </head>
 <body>
   <header class="topbar">
@@ -72,11 +72,17 @@
 
   <div id="toast" class="toast" hidden></div>
 
+  <!-- El "?v=N" en cada script/css de este proyecto es cache-busting manual:
+       subile el número cada vez que cambie alguno de esos archivos. Sin
+       esto, algunos proxies/antivirus corporativos (visto en producción con
+       "Harmony Endpoint") pueden seguir sirviendo una versión vieja del
+       sitio incluso después de deployar un fix, sin importar los headers
+       Cache-Control del servidor. -->
   <script src="vendor/jszip.min.js"></script>
-  <script src="js/ooxml-utils.js"></script>
-  <script src="js/template.js"></script>
-  <script src="js/pptx-merger.js"></script>
-  <script src="js/pptx-parser.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/ooxml-utils.js?v=3"></script>
+  <script src="js/template.js?v=3"></script>
+  <script src="js/pptx-merger.js?v=3"></script>
+  <script src="js/pptx-parser.js?v=3"></script>
+  <script src="js/app.js?v=3"></script>
 </body>
 </html>
