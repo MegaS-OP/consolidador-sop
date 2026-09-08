@@ -20,9 +20,9 @@
  *  - Cada parte se copia UNA sola vez por archivo de origen (se cachea),
  *    y se renombra con un prefijo único por origen para que no choquen
  *    nombres entre las distintas plantas (todas pueden traer "image1.png").
- *  - Notas del orador, comentarios y metadata de colaboración de Office no
- *    se copian: no aportan al consolidado y complicarían mantener IDs
- *    sincronizados.
+ *  - Sólo se excluyen las notas del orador: son las únicas relaciones que
+ *    viven exclusivamente en el .rels de su parte dueña, sin ninguna
+ *    referencia inline en el contenido que pueda quedar colgando.
  */
 
 /* eslint-disable no-undef */
@@ -33,6 +33,26 @@
     root.PptxMerger = factory(root.OoxmlUtils, root.SopTemplate, root.JSZip);
   }
 })(typeof self !== 'undefined' ? self : this, function (OoxmlUtils, SopTemplate, JSZip) {
+  // PNG transparente de 1x1, usado como placeholder cuando una imagen
+  // referenciada por una diapositiva no se encuentra en el archivo de
+  // origen (vínculo roto en el .pptx original). Evita que el consolidado
+  // final quede con una referencia sin destino.
+  const PLACEHOLDER_PNG_BASE64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+  function base64ToBytes(b64) {
+    if (typeof atob === 'function') {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return bytes;
+    }
+    // Node (tests): no hay atob global.
+    return new Uint8Array(Buffer.from(b64, 'base64'));
+  }
+
+  const PLACEHOLDER_PNG_BYTES = base64ToBytes(PLACEHOLDER_PNG_BASE64);
+
   class ConsolidatedBuilder {
     constructor() {
       this.outZip = new JSZip();
@@ -125,12 +145,30 @@
       if (text === undefined) {
         const file = meta.zip.file(origPath);
         if (!file) {
-          this.warnings.push(`No se encontró la parte "${origPath}" (origen: ${sourceKey}). Se omite.`);
-          this.partCache.delete(cacheKey);
-          return null;
+          if (isXmlPart) {
+            // Falta una parte XML (p.ej. un layout referenciado que no está
+            // en el .zip): no hay una manera segura de sustituirla, así que
+            // se propaga como antes (se corta esta rama de la copia).
+            this.warnings.push(`No se encontró la parte "${origPath}" (origen: ${sourceKey}). Se omite.`);
+            this.partCache.delete(cacheKey);
+            return null;
+          }
+          // Falta un archivo binario (típicamente una imagen con el vínculo
+          // roto en el .pptx original, algo frecuente en decks exportados
+          // de Google Slides). Antes se borraba la relación entera, lo que
+          // dejaba el r:id que la usa apuntando a la nada -> el archivo
+          // final quedaba corrupto. Ahora se sustituye por un placeholder
+          // en blanco: el archivo final sigue siendo válido, esa imagen
+          // puntual se ve vacía, y queda avisado para revisar esa diapositiva.
+          this.warnings.push(
+            `No se encontró "${origPath}" (origen: ${sourceKey}); esa imagen quedó en blanco en el consolidado — conviene revisar esa diapositiva.`
+          );
+          binData = PLACEHOLDER_PNG_BYTES;
+        } else if (isXmlPart) {
+          text = await file.async('string');
+        } else {
+          binData = await file.async('uint8array');
         }
-        if (isXmlPart) text = await file.async('string');
-        else binData = await file.async('uint8array');
       }
 
       if (isXmlPart) {

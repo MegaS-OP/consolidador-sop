@@ -300,7 +300,12 @@
       const builder = new ConsolidatedBuilder();
 
       statusEl.textContent = 'Cargando plantilla…';
-      const tplBuf = await fetch('assets/template.pptx').then((r) => {
+      // cache: 'no-store' + query de cache-busting: assets/template.pptx se
+      // sirve con Cache-Control de larga duración (ver netlify.toml); sin
+      // esto, una plantilla vieja cacheada en el navegador podría quedar
+      // mezclada con una versión más nueva del motor y generar un archivo
+      // inconsistente.
+      const tplBuf = await fetch(`assets/template.pptx?v=${Date.now()}`, { cache: 'no-store' }).then((r) => {
         if (!r.ok) throw new Error('No se pudo cargar la plantilla (assets/template.pptx).');
         return r.arrayBuffer();
       });
