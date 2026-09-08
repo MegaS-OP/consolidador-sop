@@ -346,6 +346,9 @@
       if (builder.warnings.length) {
         console.warn('Avisos de generación:', builder.warnings);
       }
+      if (builder.notes.length) {
+        console.info('Notas de generación (informativo, no requiere revisión):', builder.notes);
+      }
 
       const parts = mesAnio.split(/\s+/);
       const mes = sanitizeFileNamePart(parts[0] || mesAnio);

@@ -53,6 +53,56 @@
 
   const PLACEHOLDER_PNG_BYTES = base64ToBytes(PLACEHOLDER_PNG_BASE64);
 
+  const OLE_GRAPHIC_URI = 'http://schemas.openxmlformats.org/presentationml/2006/ole';
+
+  /**
+   * Reemplaza cada gráfico embebido (objeto OLE — típicamente think-cell,
+   * también gráficos de Excel/Word embebidos) por su imagen de respaldo
+   * estática ("fallback"), que el propio archivo ya trae para cuando
+   * PowerPoint no puede activar el objeto.
+   *
+   * Por qué: los objetos OLE son el motivo más común de que un antivirus o
+   * filtro de adjuntos corporativo (Check Point Harmony Endpoint entre
+   * otros) "limpie"/reconstruya el .pptx al descargarlo, dejando
+   * referencias rotas en el proceso — el archivo final queda invalidado
+   * por algo completamente fuera de este código. Nadie necesita editar
+   * esos gráficos desde un consolidado de sólo lectura, así que
+   * convertirlos a imagen fija de entrada evita el problema de raíz.
+   *
+   * Sólo se transforma el patrón conocido y verificado (<p:graphicFrame>
+   * con <a:graphicData uri=".../ole"> y una <p:pic> de respaldo dentro de
+   * <mc:Fallback>). Si la estructura no coincide exactamente, se deja tal
+   * cual — es preferible conservar el objeto OLE (funciona, aunque un
+   * antivirus corporativo pueda tocarlo) a arriesgarse a dejar XML inválido.
+   *
+   * @returns {{ text: string, removedRIds: Set<string> }} removedRIds son
+   *   los r:id de relaciones de tipo oleObject que quedaron sin ninguna
+   *   referencia en el XML resultante — copyPart las puede omitir sin
+   *   dejar nada colgando.
+   */
+  function flattenOleObjects(xmlText) {
+    const removedRIds = new Set();
+    if (!xmlText.includes(OLE_GRAPHIC_URI)) return { text: xmlText, removedRIds };
+
+    const frameRe = /<p:graphicFrame>[\s\S]*?<\/p:graphicFrame>/g;
+    const newText = xmlText.replace(frameRe, (frameBlock) => {
+      if (!frameBlock.includes(OLE_GRAPHIC_URI)) return frameBlock;
+
+      const fbMatch = frameBlock.match(/<mc:Fallback>([\s\S]*?)<\/mc:Fallback>/);
+      if (!fbMatch) return frameBlock;
+      const picMatch = fbMatch[1].match(/<p:pic>[\s\S]*?<\/p:pic>/);
+      if (!picMatch) return frameBlock;
+
+      const idRe = /<p:oleObj\b[^>]*\br:id="(rId\d+)"/g;
+      let m;
+      while ((m = idRe.exec(frameBlock))) removedRIds.add(m[1]);
+
+      return picMatch[0];
+    });
+
+    return { text: newText, removedRIds };
+  }
+
   class ConsolidatedBuilder {
     constructor() {
       this.outZip = new JSZip();
@@ -76,7 +126,8 @@
       this.nextSldMasterIdNum = 2147483648;
       this.registeredMasters = new Set();
 
-      this.warnings = [];
+      this.warnings = []; // cosas para que la usuaria revise (imagen faltante, parte no encontrada)
+      this.notes = []; // informativo, no necesita revisión (p.ej. gráficos aplanados a imagen)
       this.slideSize = { cx: 12192000, cy: 6858000 };
 
       this._portadaBaseXml = null;
@@ -172,6 +223,14 @@
       }
 
       if (isXmlPart) {
+        const flattened = flattenOleObjects(text);
+        text = flattened.text;
+        if (flattened.removedRIds.size) {
+          this.notes.push(
+            `Se convirtió ${flattened.removedRIds.size} gráfico(s) embebido(s) (think-cell u similar) a imagen fija en "${origPath}", para evitar que un antivirus corporativo corrompa el archivo al descargarlo.`
+          );
+        }
+
         const relsPath = OoxmlUtils.relsPathFor(origPath);
         const relsFile = meta.zip.file(relsPath);
         if (relsFile) {
@@ -180,6 +239,12 @@
           const keptEntries = [];
           for (const rel of entries) {
             if (OoxmlUtils.EXCLUDED_REL_TYPE_SUBSTR.some((s) => rel.type.includes(s))) continue;
+            if (rel.type.endsWith('/oleObject') && flattened.removedRIds.has(rel.id)) {
+              // Se aplanó a imagen fija más arriba: el XML ya no referencia
+              // este r:id, así que la relación (y el objeto OLE binario que
+              // apuntaba) se puede omitir sin dejar nada colgando.
+              continue;
+            }
             if (rel.targetMode === 'External') {
               keptEntries.push(rel);
               continue;
