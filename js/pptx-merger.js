@@ -84,6 +84,27 @@
     const removedRIds = new Set();
     if (!xmlText.includes(OLE_GRAPHIC_URI)) return { text: xmlText, removedRIds };
 
+    // La <p:pic> de respaldo que se extrae de adentro del objeto OLE trae
+    // su propio id de shape (<p:cNvPr id="N">) heredado del objeto
+    // original — y ese número frecuentemente ya está en uso por OTRA forma
+    // de la MISMA diapositiva/layout/master (piezas generadas por la misma
+    // plantilla de think-cell tienden a reusar los mismos ids), o se repite
+    // entre dos objetos OLE distintos de la misma parte. PowerPoint exige
+    // ids de shape únicos dentro de cada parte y lo valida estricto (a
+    // diferencia de python-pptx, que no se queja) — por eso hay que
+    // reasignar un id que no choque con ninguno de los ya presentes.
+    const usedIds = new Set();
+    const idScanRe = /<p:cNvPr\s+id="(\d+)"/g;
+    let idScan;
+    while ((idScan = idScanRe.exec(xmlText))) usedIds.add(idScan[1]);
+    let nextFreshId = 900001;
+    function freshShapeId() {
+      while (usedIds.has(String(nextFreshId))) nextFreshId++;
+      const id = nextFreshId++;
+      usedIds.add(String(id));
+      return id;
+    }
+
     const frameRe = /<p:graphicFrame>[\s\S]*?<\/p:graphicFrame>/g;
     const newText = xmlText.replace(frameRe, (frameBlock) => {
       if (!frameBlock.includes(OLE_GRAPHIC_URI)) return frameBlock;
@@ -97,10 +118,47 @@
       let m;
       while ((m = idRe.exec(frameBlock))) removedRIds.add(m[1]);
 
-      return picMatch[0];
+      const newShapeId = freshShapeId();
+      const picXml = picMatch[0].replace(/(<p:cNvPr\s+id=")\d+(")/, `$1${newShapeId}$2`);
+      return picXml;
     });
 
     return { text: newText, removedRIds };
+  }
+
+  /**
+   * Reasigna ids frescos a cualquier <p:cNvPr id="N"> repetido dentro de
+   * una misma parte (deja intacta la primera aparición de cada id, sólo
+   * renumera las siguientes). PowerPoint exige ids de shape únicos por
+   * parte y lo valida estricto; encontramos decks reales con IDs
+   * duplicados ya desde su autoría original (típico de copiar/pegar
+   * diapositivas dentro de PowerPoint) que el propio PowerPoint tolera al
+   * abrir un archivo que él mismo guardó, pero no al abrir uno reconstruido
+   * por una herramienta externa como ésta. Se corre siempre, sobre
+   * cualquier parte, no sólo las que pasaron por flattenOleObjects.
+   */
+  function dedupeShapeIds(xmlText) {
+    const allIds = new Set();
+    const scanRe = /<p:cNvPr\s+id="(\d+)"/g;
+    let sm;
+    while ((sm = scanRe.exec(xmlText))) allIds.add(sm[1]);
+
+    let nextFreshId = 900001;
+    function freshId() {
+      while (allIds.has(String(nextFreshId))) nextFreshId++;
+      const id = nextFreshId++;
+      allIds.add(String(id));
+      return id;
+    }
+
+    const seen = new Set();
+    return xmlText.replace(/<p:cNvPr\s+id="(\d+)"/g, (full, id) => {
+      if (!seen.has(id)) {
+        seen.add(id);
+        return full;
+      }
+      return full.replace(`id="${id}"`, `id="${freshId()}"`);
+    });
   }
 
   class ConsolidatedBuilder {
@@ -230,6 +288,7 @@
             `Se convirtió ${flattened.removedRIds.size} gráfico(s) embebido(s) (think-cell u similar) a imagen fija en "${origPath}", para evitar que un antivirus corporativo corrompa el archivo al descargarlo.`
           );
         }
+        text = dedupeShapeIds(text);
 
         const relsPath = OoxmlUtils.relsPathFor(origPath);
         const relsFile = meta.zip.file(relsPath);
