@@ -163,7 +163,13 @@
 
   class ConsolidatedBuilder {
     constructor() {
-      this.outZip = new JSZip();
+      // Se van juntando acá durante la copia, y recién se escriben al zip
+      // final en build() — DESPUÉS de las partes "núcleo" ([Content_Types].xml,
+      // _rels/.rels, docProps, presentation.xml). Algunos lectores de OOXML
+      // (Microsoft incluido, en la práctica) son quisquillosos con que esas
+      // partes centrales aparezcan primero en el .zip; si se escriben a
+      // medida que se van copiando diapositivas, terminan últimas.
+      this.stagedParts = []; // {path, data}
       this.sourceMeta = new Map(); // sourceKey -> { zip, contentTypes }
       this.partCache = new Map(); // `${sourceKey}::${virtualPath}` -> newPath
       this.basenameCounters = new Map(); // `${sourceKey}::${base}` no hace falta, el prefijo ya lo hace único
@@ -326,12 +332,12 @@
             }
           }
           if (keptEntries.length) {
-            this.outZip.file(OoxmlUtils.relsPathFor(newPath), OoxmlUtils.buildRelsXml(keptEntries));
+            this.stagedParts.push({ path: OoxmlUtils.relsPathFor(newPath), data: OoxmlUtils.buildRelsXml(keptEntries) });
           }
         }
-        this.outZip.file(newPath, text);
+        this.stagedParts.push({ path: newPath, data: text });
       } else {
-        this.outZip.file(newPath, binData);
+        this.stagedParts.push({ path: newPath, data: binData });
       }
 
       this._registerContentType(sourceKey, origPath, newPath, ext);
@@ -465,6 +471,12 @@
 
     /** Ensambla [Content_Types].xml, presentation.xml y sus .rels, y genera el .pptx final. */
     async build() {
+      // El zip final se arma recién acá: las partes "núcleo" del paquete
+      // ([Content_Types].xml, _rels/.rels, docProps, presentation.xml) se
+      // escriben PRIMERO, antes que ninguna diapositiva/media/layout — ver
+      // el comentario en el constructor sobre por qué importa el orden.
+      const outZip = new JSZip();
+
       const ctParts = [
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n',
         `<Types xmlns="${OoxmlUtils.CONTENT_TYPES_NS}">`,
@@ -481,7 +493,7 @@
         ctParts.push(`<Override PartName="/${path}" ContentType="${OoxmlUtils.encodeXmlAttr(ct)}"/>`);
       }
       ctParts.push('</Types>');
-      this.outZip.file('[Content_Types].xml', ctParts.join(''));
+      outZip.file('[Content_Types].xml', ctParts.join(''));
 
       // docProps/core.xml y app.xml: metadata estándar que todo .pptx
       // generado por PowerPoint incluye. Sin esto, algunos filtros de
@@ -489,7 +501,7 @@
       // "*.cleaned.pptx" al "limpiarlo") pueden no reconocer el paquete
       // como un Office válido y corromperlo al reescribirlo.
       const nowIso = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
-      this.outZip.file(
+      outZip.file(
         'docProps/core.xml',
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n' +
           '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" ' +
@@ -502,7 +514,7 @@
           `<dcterms:modified xsi:type="dcterms:W3CDTF">${nowIso}</dcterms:modified>` +
           '</cp:coreProperties>'
       );
-      this.outZip.file(
+      outZip.file(
         'docProps/app.xml',
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n' +
           '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" ' +
@@ -514,7 +526,7 @@
           '</Properties>'
       );
 
-      this.outZip.file(
+      outZip.file(
         '_rels/.rels',
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n' +
           `<Relationships xmlns="${OoxmlUtils.RELS_NS}">` +
@@ -542,10 +554,14 @@
         `<p:sldSz cx="${this.slideSize.cx}" cy="${this.slideSize.cy}"/>` +
         '<p:notesSz cx="6858000" cy="9144000"/>' +
         '</p:presentation>';
-      this.outZip.file('ppt/presentation.xml', presentationXml);
-      this.outZip.file('ppt/_rels/presentation.xml.rels', OoxmlUtils.buildRelsXml(this.presRelEntries));
+      outZip.file('ppt/presentation.xml', presentationXml);
+      outZip.file('ppt/_rels/presentation.xml.rels', OoxmlUtils.buildRelsXml(this.presRelEntries));
 
-      return this.outZip.generateAsync({
+      for (const part of this.stagedParts) {
+        outZip.file(part.path, part.data);
+      }
+
+      return outZip.generateAsync({
         type: 'blob',
         mimeType:
           'application/vnd.openxmlformats-officedocument.presentationml.presentation',
