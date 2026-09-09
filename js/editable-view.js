@@ -87,15 +87,26 @@
 
   function buildImagesHtml(images) {
     if (!images || !images.length) return '';
-    return images.map((src) => `<img src="${src}" alt="" />`).join('');
+    return images
+      .map((src) => `<img src="${src}" alt="" class="zoomable-image" title="Clic para ampliar" />`)
+      .join('');
   }
 
   function buildSlideCardHtml(card) {
     const hasImages = card.images && card.images.length > 0;
+    const hasText = Boolean(card.paragraphs?.length || card.tables?.length);
     const body =
       buildParagraphsHtml(card.paragraphs) +
       buildTablesHtml(card.tables) +
-      (!card.paragraphs?.length && !card.tables?.length ? '<p class="slide-card-empty-hint">(sin texto)</p>' : '');
+      (!hasText ? '<p class="slide-card-empty-hint">(sin texto)</p>' : '');
+
+    // Sin texto de cuerpo (sólo el título) + imágenes: la columna de texto
+    // sobra, así que las imágenes pasan a ocupar todo el ancho de la
+    // tarjeta en vez de aplastarse en la columna angosta de siempre — es
+    // el caso típico de una diapositiva que es, en los hechos, una captura
+    // pegada (una tabla de Excel, un dashboard) en vez de texto nativo.
+    let bodyClass = ' no-image';
+    if (hasImages) bodyClass = hasText ? '' : ' images-only';
 
     return (
       `<section class="slide-card" data-uid="${card.uid || uid()}" data-type="slide" data-section="${card.sectionId || ''}" style="--section-color:${card.sectionColor}">` +
@@ -108,7 +119,7 @@
       `<button type="button" class="card-btn" data-action="delete" title="Eliminar">×</button>` +
       `</div>` +
       `</header>` +
-      `<div class="slide-card-body${hasImages ? '' : ' no-image'}">` +
+      `<div class="slide-card-body${bodyClass}">` +
       `<div class="slide-card-text">` +
       `<h3 class="slide-card-title" contenteditable="true">${escapeHtml(card.title)}</h3>` +
       body +
@@ -170,8 +181,42 @@
     }
   }
 
+  // ---------- Zoom de imágenes (clic para ampliar a tamaño real) ----------
+
+  let lightboxEl = null;
+
+  function ensureLightbox() {
+    if (lightboxEl) return lightboxEl;
+    lightboxEl = document.createElement('div');
+    lightboxEl.className = 'image-lightbox no-print';
+    lightboxEl.innerHTML = '<img alt="" />';
+    lightboxEl.hidden = true;
+    lightboxEl.addEventListener('click', () => closeLightbox());
+    document.body.appendChild(lightboxEl);
+    return lightboxEl;
+  }
+
+  function openLightbox(src) {
+    const el = ensureLightbox();
+    el.querySelector('img').src = src;
+    el.hidden = false;
+  }
+
+  function closeLightbox() {
+    if (lightboxEl) lightboxEl.hidden = true;
+  }
+
   function wireInteractions(container, opts) {
     opts = opts || {};
+
+    // ---- Ampliar imagen al hacer clic ----
+    container.addEventListener('click', (e) => {
+      const img = e.target.closest('.zoomable-image');
+      if (img) openLightbox(img.src);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeLightbox();
+    });
 
     // ---- Botones de tarjeta: eliminar / duplicar ----
     container.addEventListener('click', (e) => {
