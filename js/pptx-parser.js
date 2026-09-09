@@ -32,6 +32,30 @@
     }
   }
 
+  // Una imagen que ocupa menos de esta fracción del área de la diapositiva
+  // se trata como logo/marca de agua (el isotipo de Megalabs, el logo de la
+  // planta) y no como contenido real: en la práctica esas marcas rondan el
+  // 0.5%-1% del área, mientras que un gráfico o tabla pegada como imagen
+  // ronda el 15% o más. Evita que un logo chico compita por espacio con el
+  // gráfico real en la columna de imágenes de la tarjeta.
+  const LOGO_AREA_FRACTION = 0.03;
+
+  const slideSizeCache = new WeakMap();
+
+  /** Tamaño de diapositiva (EMU) de ppt/presentation.xml, cacheado por zip. */
+  async function getSlideSize(zip) {
+    if (slideSizeCache.has(zip)) return slideSizeCache.get(zip);
+    let size = null;
+    const presFile = zip.file('ppt/presentation.xml');
+    if (presFile) {
+      const presXml = await presFile.async('string');
+      const m = presXml.match(/<p:sldSz\b[^>]*cx="(\d+)"[^>]*cy="(\d+)"/);
+      if (m) size = { cx: Number(m[1]), cy: Number(m[2]) };
+    }
+    slideSizeCache.set(zip, size);
+    return size;
+  }
+
   /** Orden real de las diapositivas (según ppt/presentation.xml), como rutas ppt/slides/slideN.xml. */
   async function getSlideOrder(zip) {
     const presFile = zip.file('ppt/presentation.xml');
@@ -203,7 +227,8 @@
     return tables;
   }
 
-  /** Todas las imágenes renderizables de la diapositiva (no sólo la principal), en orden de aparición. */
+  /** Todas las imágenes renderizables de la diapositiva que no sean logo/marca
+   * de agua (ver LOGO_AREA_FRACTION), en orden de aparición. */
   async function extractAllImages(zip, slidePath, slideXml) {
     const relsPath = OoxmlUtils.relsPathFor(slidePath);
     const relsFile = zip.file(relsPath);
@@ -212,14 +237,27 @@
     const imageRels = new Map(rels.filter((r) => r.type.endsWith('/image')).map((r) => [r.id, r]));
     if (!imageRels.size) return [];
 
+    const slideSize = await getSlideSize(zip);
+    const slideArea = slideSize ? slideSize.cx * slideSize.cy : null;
+
     const images = [];
     const picRe = /<p:pic>[\s\S]*?<\/p:pic>/g;
     let m;
     while ((m = picRe.exec(slideXml))) {
-      const embedMatch = m[0].match(/r:embed="(rId\d+)"/);
+      const block = m[0];
+      const embedMatch = block.match(/r:embed="(rId\d+)"/);
       if (!embedMatch) continue;
       const rel = imageRels.get(embedMatch[1]);
       if (!rel) continue;
+
+      if (slideArea) {
+        const extMatch = block.match(/<a:ext cx="(\d+)" cy="(\d+)"\s*\/>/);
+        if (extMatch) {
+          const area = Number(extMatch[1]) * Number(extMatch[2]);
+          if (area / slideArea < LOGO_AREA_FRACTION) continue; // logo/marca de agua, se omite
+        }
+      }
+
       const imgPath = OoxmlUtils.resolveRelTarget(slidePath, rel.target);
       const imgFile = zip.file(imgPath);
       if (!imgFile) continue;

@@ -657,13 +657,16 @@ main#app { max-width: 1180px; margin: 0 auto; padding: 32px 24px 80px; }
 
 .slide-card-body {
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 20px 24px;
   display: flex;
   gap: 24px;
 }
 
-.slide-card-body.no-image { display: block; }
+/* Cada columna (texto / imágenes) maneja su propio desborde por separado
+   — así, si el texto es largo, sólo esa columna se desliza, sin arrastrar
+   con ella a la imagen (que ya se ve completa, sin necesidad de deslizar). */
+.slide-card-body.no-image { display: block; overflow-y: auto; }
 
 /* Sin texto de cuerpo (sólo título) + imágenes: la columna de texto no
    suma nada, así que la(s) imagen(es) pasan a ocupar todo el ancho en vez
@@ -674,7 +677,7 @@ main#app { max-width: 1180px; margin: 0 auto; padding: 32px 24px 80px; }
 .slide-card-body.images-only .slide-card-text { flex: 0 0 auto; }
 .slide-card-body.images-only .slide-card-images { flex: 1; width: 100%; }
 
-.slide-card-text { flex: 1; min-width: 0; }
+.slide-card-text { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; }
 
 .slide-card-title {
   font-family: var(--font-head);
@@ -724,17 +727,26 @@ main#app { max-width: 1180px; margin: 0 auto; padding: 32px 24px 80px; }
   font-family: var(--font-body);
 }
 
+/* Sin scroll: cada imagen se escala completa dentro del espacio
+   disponible (object-fit: contain, nunca recortada) en vez de mostrarse a
+   tamaño natural y obligar a deslizar para verla entera. Con más de una
+   imagen en la misma tarjeta, se reparten el alto disponible por igual. */
 .slide-card-images {
   flex: 0 0 38%;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  overflow-y: auto;
+  overflow: hidden;
+  min-height: 0;
 }
 .slide-card-images img {
   width: 100%;
+  flex: 1;
+  min-height: 0;
+  object-fit: contain;
   border-radius: 8px;
   box-shadow: var(--shadow);
+  background: var(--surface);
 }
 
 .zoomable-image { cursor: zoom-in; }
