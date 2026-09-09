@@ -8,11 +8,11 @@
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
-# Todo lo demás (index.html, css/, js/, assets/template.pptx) SÍ cambia con
-# cada deploy y tiene que revalidarse siempre: nada de esto se puede
-# cachear, ni por el navegador ni por proxies intermedios (hay reportes de
-# un antivirus/proxy corporativo -Harmony Endpoint- sirviendo una versión
-# vieja del sitio pese a haber deployado un fix).
+# Todo lo demás (index.html, css/, js/) SÍ cambia con cada deploy y tiene que
+# revalidarse siempre: nada de esto se puede cachear, ni por el navegador ni
+# por proxies intermedios (hay reportes de un antivirus/proxy corporativo
+# -Harmony Endpoint- sirviendo una versión vieja del sitio pese a haber
+# deployado un fix).
 [[headers]]
   for = "/*"
   [headers.values]

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=6" />
+  <link rel="stylesheet" href="css/styles.css?v=7" />
 </head>
 <body>
   <header class="topbar">
@@ -68,6 +68,29 @@
         <p id="generatingStatus">Generando el consolidado…</p>
       </div>
     </section>
+
+    <!-- ============ PANTALLA 4: VISTA CONSOLIDADA ============ -->
+    <section id="screenConsolidated" class="screen" hidden>
+      <div class="consolidated-toolbar no-print">
+        <div class="view-toggle">
+          <button type="button" class="view-toggle-btn active" id="btnVertical">Vertical</button>
+          <button type="button" class="view-toggle-btn" id="btnPresent">Presentación</button>
+        </div>
+        <div class="consolidated-actions">
+          <div class="present-nav" id="presentNav">
+            <button type="button" class="btn btn-ghost" id="presentPrev">←</button>
+            <span class="present-nav-count" id="presentCount">1 / 1</span>
+            <button type="button" class="btn btn-ghost" id="presentNext">→</button>
+          </div>
+          <button type="button" class="btn btn-ghost" id="btnAddBlank">+ Nota</button>
+          <button type="button" class="btn btn-ghost" id="btnBackToBoard">← Volver al tablero</button>
+          <button type="button" class="btn btn-ghost" id="btnPrint">Exportar a PDF</button>
+          <button type="button" class="btn btn-primary" id="btnDownloadHtml">Descargar HTML</button>
+        </div>
+      </div>
+
+      <div class="consolidated-list" id="consolidatedList"></div>
+    </section>
   </main>
 
   <div id="toast" class="toast" hidden></div>
@@ -79,10 +102,11 @@
        sitio incluso después de deployar un fix, sin importar los headers
        Cache-Control del servidor. -->
   <script src="vendor/jszip.min.js"></script>
-  <script src="js/ooxml-utils.js?v=6"></script>
-  <script src="js/template.js?v=6"></script>
-  <script src="js/pptx-merger.js?v=6"></script>
-  <script src="js/pptx-parser.js?v=6"></script>
-  <script src="js/app.js?v=6"></script>
+  <script src="js/ooxml-utils.js?v=7"></script>
+  <script src="js/pptx-parser.js?v=7"></script>
+  <script src="js/classifier.js?v=7"></script>
+  <script src="js/editable-view.js?v=7"></script>
+  <script src="js/export-html.js?v=7"></script>
+  <script src="js/app.js?v=7"></script>
 </body>
 </html>

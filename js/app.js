@@ -26,7 +26,7 @@
   function setScreen(name) {
     for (const el of document.querySelectorAll('.screen')) el.hidden = true;
     $(`#screen${name}`).hidden = false;
-    $('#topbarActions').hidden = name === 'Upload';
+    $('#topbarActions').hidden = name === 'Upload' || name === 'Consolidated';
   }
 
   function escapeHtml(s) {
@@ -168,12 +168,14 @@
     state.slides = [];
     for (const plant of okPlants) {
       plant.slides.forEach((s, i) => {
+        const cls = Classifier.classifySlide(s.title, s.fullText);
         state.slides.push({
           uid: 'slide' + nextUid++,
           plantId: plant.id,
           slidePath: s.slidePath,
           title: s.title,
           thumbnail: s.thumbnail,
+          sectionId: cls.sectionId,
           excluded: false,
           orderIndex: i,
         });
@@ -280,12 +282,17 @@
     btnGenerar.disabled = !hasAnySlide || !mesAnioInput.value.trim();
   }
 
-  // ---------- Generación del consolidado ----------
+  // ---------- Generación de la vista consolidada ----------
 
   btnGenerar.addEventListener('click', generateConsolidated);
 
   function sanitizeFileNamePart(s) {
     return s.trim().replace(/\s+/g, '_').replace(/[^\w\-]/g, '');
+  }
+
+  /** Orden fijo de secciones para agrupar + divisorias; null = "Sin clasificar", siempre al final. */
+  function sectionGroupOrder() {
+    return [...Classifier.SECTIONS.map((s) => s.id), null];
   }
 
   async function generateConsolidated() {
@@ -296,65 +303,106 @@
     const statusEl = $('#generatingStatus');
 
     try {
-      const { ConsolidatedBuilder } = PptxMerger;
-      const builder = new ConsolidatedBuilder();
+      const cards = [];
 
-      statusEl.textContent = 'Cargando plantilla…';
-      // cache: 'no-store' + query de cache-busting: assets/template.pptx se
-      // sirve con Cache-Control de larga duración (ver netlify.toml); sin
-      // esto, una plantilla vieja cacheada en el navegador podría quedar
-      // mezclada con una versión más nueva del motor y generar un archivo
-      // inconsistente.
-      const tplBuf = await fetch(`assets/template.pptx?v=${Date.now()}`, { cache: 'no-store' }).then((r) => {
-        if (!r.ok) throw new Error('No se pudo cargar la plantilla (assets/template.pptx).');
-        return r.arrayBuffer();
-      });
-      const tplZip = await JSZip.loadAsync(tplBuf);
-      await builder.loadTemplate(tplZip);
+      for (const secId of sectionGroupOrder()) {
+        const secMeta = Classifier.sectionMeta(secId);
+        const slidesInSection = state.slides
+          .filter((s) => !s.excluded && s.sectionId === secId)
+          .sort((a, b) => {
+            const pa = state.plantOrder.indexOf(a.plantId);
+            const pb = state.plantOrder.indexOf(b.plantId);
+            if (pa !== pb) return pa - pb;
+            return a.orderIndex - b.orderIndex;
+          });
+        if (!slidesInSection.length) continue;
 
-      for (const plant of state.plants) {
-        if (plant.status === 'ok') await builder.registerSource(plant.id, plant.zip);
-      }
+        cards.push({ type: 'divider', sectionId: secId || '', label: secMeta.label, color: secMeta.color });
 
-      statusEl.textContent = 'Armando portada…';
-      await builder.addPortada(mesAnio);
-
-      const labels = state.plantOrder.map((pid) => plantById(pid).label);
-
-      for (let i = 0; i < state.plantOrder.length; i++) {
-        const pid = state.plantOrder[i];
-        const plant = plantById(pid);
-        statusEl.textContent = `Agregando ${plant.label}…`;
-        await builder.addDivider(labels, i, i);
-
-        const plantSlides = state.slides
-          .filter((s) => s.plantId === pid && !s.excluded)
-          .sort((a, b) => a.orderIndex - b.orderIndex);
-
-        for (const slide of plantSlides) {
-          await builder.addPlantSlide(pid, slide.slidePath);
+        for (const slide of slidesInSection) {
+          const plant = plantById(slide.plantId);
+          statusEl.textContent = `Extrayendo "${slide.title}" (${plant.label})…`;
+          const content = await PptxParser.extractSlideContent(plant.zip, slide.slidePath);
+          cards.push({
+            type: 'slide',
+            uid: slide.uid,
+            plantLabel: plant.label,
+            sectionId: secId || '',
+            sectionLabel: secMeta.label,
+            sectionColor: secMeta.color,
+            title: content.title,
+            paragraphs: content.paragraphs,
+            tables: content.tables,
+            images: content.images,
+          });
         }
       }
 
-      statusEl.textContent = 'Agregando apéndice…';
-      await builder.addDivider(labels, state.plantOrder.length, state.plantOrder.length);
-      await builder.addAppendix();
+      const container = $('#consolidatedList');
+      EditableView.renderConsolidatedView(container, cards);
+      updatePresentCount();
 
-      statusEl.textContent = 'Generando archivo final…';
-      const blob = await builder.build();
+      setScreen('Consolidated');
+    } catch (e) {
+      console.error(e);
+      setScreen('Board');
+      showToast('No se pudo generar la vista consolidada: ' + (e.message || 'error desconocido'), 7000);
+    }
+  }
 
-      if (builder.warnings.length) {
-        console.warn('Avisos de generación:', builder.warnings);
-      }
-      if (builder.notes.length) {
-        console.info('Notas de generación (informativo, no requiere revisión):', builder.notes);
-      }
+  // ---------- Pantalla 3: vista consolidada ----------
+
+  const consolidatedList = $('#consolidatedList');
+  const presentCountEl = $('#presentCount');
+
+  function updatePresentCount() {
+    const n = consolidatedList.children.length;
+    if (presentCountEl) presentCountEl.textContent = `1 / ${n}`;
+  }
+
+  EditableView.wireInteractions(consolidatedList, {
+    addBlankButton: $('#btnAddBlank'),
+    verticalButton: $('#btnVertical'),
+    presentButton: $('#btnPresent'),
+    presentNav: $('#presentNav'),
+    presentPrev: $('#presentPrev'),
+    presentNext: $('#presentNext'),
+    presentCount: presentCountEl,
+    printButton: $('#btnPrint'),
+  });
+
+  $('#btnBackToBoard').addEventListener('click', () => {
+    if (!confirm('Volver al tablero descarta cualquier edición hecha en la vista consolidada. ¿Continuar?')) return;
+    setScreen('Board');
+  });
+
+  $('#btnDownloadHtml').addEventListener('click', downloadStandaloneHtml);
+
+  async function downloadStandaloneHtml() {
+    const btn = $('#btnDownloadHtml');
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Preparando…';
+    try {
+      const [cssText, jsText] = await Promise.all([
+        fetch(`css/styles.css?v=${Date.now()}`, { cache: 'no-store' }).then((r) => r.text()),
+        fetch(`js/editable-view.js?v=${Date.now()}`, { cache: 'no-store' }).then((r) => r.text()),
+      ]);
+
+      const mesAnio = mesAnioInput.value.trim() || 'Consolidado';
+      const html = ExportHtml.buildStandaloneHtml({
+        title: `Informe S&OP Consolidado ${mesAnio}`,
+        cardsHtml: consolidatedList.innerHTML,
+        cssText,
+        editableViewJsText: jsText,
+      });
 
       const parts = mesAnio.split(/\s+/);
       const mes = sanitizeFileNamePart(parts[0] || mesAnio);
       const anio = sanitizeFileNamePart(parts.slice(1).join(' ') || '');
-      const fileName = `Informe_SOP_Consolidado_${mes}${anio ? '_' + anio : ''}.pptx`;
+      const fileName = `Informe_SOP_Consolidado_${mes}${anio ? '_' + anio : ''}.html`;
 
+      const blob = new Blob([html], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -364,16 +412,13 @@
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
 
-      setScreen('Board');
-      if (builder.warnings.length) {
-        showToast(`Listo, con ${builder.warnings.length} aviso(s) — ver consola.`, 6000);
-      } else {
-        showToast('Consolidado generado y descargado.', 4000);
-      }
+      showToast('HTML descargado.', 4000);
     } catch (e) {
       console.error(e);
-      setScreen('Board');
-      showToast('No se pudo generar el consolidado: ' + (e.message || 'error desconocido'), 7000);
+      showToast('No se pudo descargar el HTML: ' + (e.message || 'error desconocido'), 7000);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
     }
   }
 

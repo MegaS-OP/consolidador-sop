@@ -112,6 +112,119 @@
     return `data:${mime};base64,${base64}`;
   }
 
+  // ---------- Extracción de contenido completo (para la vista consolidada) ----------
+
+  function extractTitleBlock(slideXml) {
+    const blocks = OoxmlUtils.splitShapeBlocks(slideXml);
+    for (const b of blocks) {
+      if (/<p:ph\b[^>]*type="(title|ctrTitle)"/.test(b.text)) {
+        const t = OoxmlUtils.blockJoinedText(b.text).trim();
+        return { title: t, titleBlock: b };
+      }
+    }
+    for (const b of blocks) {
+      const t = OoxmlUtils.blockJoinedText(b.text).trim();
+      if (t) return { title: t, titleBlock: b };
+    }
+    return { title: '(sin título)', titleBlock: null };
+  }
+
+  function paraText(paraXml) {
+    const texts = [];
+    const re = /<a:t>([^<]*)<\/a:t>/g;
+    let m;
+    while ((m = re.exec(paraXml))) texts.push(OoxmlUtils.decodeXmlEntities(m[1]));
+    return texts.join('');
+  }
+
+  /** Párrafos de cuerpo de todas las formas de texto de la diapositiva, salvo el título. */
+  function extractParagraphs(slideXml, titleBlock) {
+    const blocks = OoxmlUtils.splitShapeBlocks(slideXml);
+    const paragraphs = [];
+    for (const b of blocks) {
+      if (titleBlock && b.start === titleBlock.start) continue;
+      const paraRe = /<a:p>([\s\S]*?)<\/a:p>/g;
+      let m;
+      while ((m = paraRe.exec(b.text))) {
+        const text = paraText(m[1]).trim();
+        if (!text) continue;
+        const lvlMatch = m[1].match(/<a:pPr[^>]*\blvl="(\d+)"/);
+        const level = lvlMatch ? Number(lvlMatch[1]) : 0;
+        const bullet = !/<a:buNone/.test(m[1]);
+        paragraphs.push({ text, level, bullet });
+      }
+    }
+    return paragraphs;
+  }
+
+  /** Tablas (<a:tbl>) como matriz de filas/columnas de texto. Simplificación: no resuelve celdas combinadas. */
+  function extractTables(slideXml) {
+    const tables = [];
+    const tblRe = /<a:tbl>[\s\S]*?<\/a:tbl>/g;
+    let tblMatch;
+    while ((tblMatch = tblRe.exec(slideXml))) {
+      const tblXml = tblMatch[0];
+      const rows = [];
+      const trRe = /<a:tr\b[^>]*>([\s\S]*?)<\/a:tr>/g;
+      let tr;
+      while ((tr = trRe.exec(tblXml))) {
+        const cells = [];
+        const tcRe = /<a:tc\b[^>]*>([\s\S]*?)<\/a:tc>/g;
+        let tc;
+        while ((tc = tcRe.exec(tr[1]))) {
+          cells.push(paraText(tc[1]).trim());
+        }
+        if (cells.length) rows.push(cells);
+      }
+      if (rows.length) tables.push({ rows });
+    }
+    return tables;
+  }
+
+  /** Todas las imágenes renderizables de la diapositiva (no sólo la principal), en orden de aparición. */
+  async function extractAllImages(zip, slidePath, slideXml) {
+    const relsPath = OoxmlUtils.relsPathFor(slidePath);
+    const relsFile = zip.file(relsPath);
+    if (!relsFile) return [];
+    const rels = OoxmlUtils.parseRels(await relsFile.async('string'));
+    const imageRels = new Map(rels.filter((r) => r.type.endsWith('/image')).map((r) => [r.id, r]));
+    if (!imageRels.size) return [];
+
+    const images = [];
+    const picRe = /<p:pic>[\s\S]*?<\/p:pic>/g;
+    let m;
+    while ((m = picRe.exec(slideXml))) {
+      const embedMatch = m[0].match(/r:embed="(rId\d+)"/);
+      if (!embedMatch) continue;
+      const rel = imageRels.get(embedMatch[1]);
+      if (!rel) continue;
+      const imgPath = OoxmlUtils.resolveRelTarget(slidePath, rel.target);
+      const imgFile = zip.file(imgPath);
+      if (!imgFile) continue;
+      const ext = OoxmlUtils.extname(imgPath);
+      const mime = RENDERABLE_MIME[ext];
+      if (!mime) continue; // emf/wmf: no renderizable en <img>, se omite
+      const base64 = await imgFile.async('base64');
+      images.push(`data:${mime};base64,${base64}`);
+    }
+    return images;
+  }
+
+  /**
+   * Contenido completo de una diapositiva (título, párrafos de cuerpo,
+   * tablas, imágenes) para volcar en la vista consolidada — a diferencia de
+   * parsePptxFile, que sólo saca lo necesario para la vista previa del
+   * tablero. Se llama sólo para las diapositivas efectivamente incluidas.
+   */
+  async function extractSlideContent(zip, slidePath) {
+    const slideXml = await zip.file(slidePath).async('string');
+    const { title, titleBlock } = extractTitleBlock(slideXml);
+    const paragraphs = extractParagraphs(slideXml, titleBlock);
+    const tables = extractTables(slideXml);
+    const images = await extractAllImages(zip, slidePath, slideXml);
+    return { title, paragraphs, tables, images };
+  }
+
   /**
    * Parsea un archivo .pptx completo y devuelve sus diapositivas en orden,
    * con título, texto completo y thumbnail cuando hay imagen disponible.
@@ -190,5 +303,5 @@
     return guess || base || 'Planta sin nombre';
   }
 
-  return { parsePptxFile, guessPlantNameFromFileName, PptxParseError };
+  return { parsePptxFile, extractSlideContent, guessPlantNameFromFileName, PptxParseError };
 });
