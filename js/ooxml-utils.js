@@ -200,12 +200,33 @@ function splitShapeBlocks(xml) {
   return blocks;
 }
 
-/** Concatena el texto (<a:t>) de un bloque de shape, en orden de aparición. */
+/**
+ * Concatena el texto (<a:t>) de un bloque de shape, en orden de aparición.
+ * Los <a:t> de un mismo párrafo (<a:p>) se unen sin separador (PowerPoint
+ * suele partir una misma frase en varios <a:r> por cambios de formato a
+ * mitad de palabra); entre párrafos distintos sí se inserta un espacio —
+ * si no, un shape con varios párrafos (frecuente: un título que en
+ * realidad es una lista de objetivos) queda todo pegado sin espacios.
+ */
 function blockJoinedText(blockXml) {
+  const paraRe = /<a:p>([\s\S]*?)<\/a:p>/g;
+  const runRe = /<a:t>([^<]*)<\/a:t>/g;
+  const paraTexts = [];
+  let pm;
+  while ((pm = paraRe.exec(blockXml))) {
+    const runs = [];
+    let rm;
+    runRe.lastIndex = 0;
+    while ((rm = runRe.exec(pm[1]))) runs.push(decodeXmlEntities(rm[1]));
+    const t = runs.join('');
+    if (t) paraTexts.push(t);
+  }
+  if (paraTexts.length) return paraTexts.join(' ');
+  // Sin <a:p> en el bloque (p.ej. no es un shape de texto): comportamiento
+  // anterior, concatenar todos los <a:t> tal cual.
   const texts = [];
-  const re = /<a:t>([^<]*)<\/a:t>/g;
   let m;
-  while ((m = re.exec(blockXml))) texts.push(decodeXmlEntities(m[1]));
+  while ((m = runRe.exec(blockXml))) texts.push(decodeXmlEntities(m[1]));
   return texts.join('');
 }
 

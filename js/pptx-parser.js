@@ -60,17 +60,39 @@
     return order;
   }
 
+  /**
+   * Párrafos (<a:p>) de un bloque de shape, con su texto ({level, bullet}) —
+   * compartido entre extractTitle/extractTitleBlock/extractParagraphs.
+   * Algunas plantillas meten varios párrafos dentro del MISMO placeholder de
+   * título (en los hechos, una mini-lista de objetivos) — de ahí que el
+   * título sea sólo el primer párrafo no vacío, nunca el bloque entero.
+   */
+  function shapeParagraphs(blockXml) {
+    const paragraphs = [];
+    const paraRe = /<a:p>([\s\S]*?)<\/a:p>/g;
+    let m;
+    while ((m = paraRe.exec(blockXml))) {
+      const text = paraText(m[1]).trim();
+      if (!text) continue;
+      const lvlMatch = m[1].match(/<a:pPr[^>]*\blvl="(\d+)"/);
+      const level = lvlMatch ? Number(lvlMatch[1]) : 0;
+      const bullet = !/<a:buNone/.test(m[1]);
+      paragraphs.push({ text, level, bullet });
+    }
+    return paragraphs;
+  }
+
   function extractTitle(slideXml) {
     const blocks = OoxmlUtils.splitShapeBlocks(slideXml);
     for (const b of blocks) {
       if (/<p:ph\b[^>]*type="(title|ctrTitle)"/.test(b.text)) {
-        const t = OoxmlUtils.blockJoinedText(b.text).trim();
-        if (t) return t;
+        const paras = shapeParagraphs(b.text);
+        if (paras.length) return paras[0].text;
       }
     }
     for (const b of blocks) {
-      const t = OoxmlUtils.blockJoinedText(b.text).trim();
-      if (t) return t;
+      const paras = shapeParagraphs(b.text);
+      if (paras.length) return paras[0].text;
     }
     return '(sin título)';
   }
@@ -114,19 +136,27 @@
 
   // ---------- Extracción de contenido completo (para la vista consolidada) ----------
 
+  /**
+   * @returns {{title: string, titleBlock: object|null, titleExtraParagraphs: Array}}
+   * `titleExtraParagraphs` son los párrafos 2°, 3°, etc. del MISMO shape de
+   * título, cuando ese shape en los hechos trae más de un párrafo (p.ej. un
+   * título que es una mini-lista de objetivos) — se recuperan como párrafos
+   * de cuerpo en vez de perderse (ver extractParagraphs).
+   */
   function extractTitleBlock(slideXml) {
     const blocks = OoxmlUtils.splitShapeBlocks(slideXml);
     for (const b of blocks) {
       if (/<p:ph\b[^>]*type="(title|ctrTitle)"/.test(b.text)) {
-        const t = OoxmlUtils.blockJoinedText(b.text).trim();
-        return { title: t, titleBlock: b };
+        const paras = shapeParagraphs(b.text);
+        if (paras.length) return { title: paras[0].text, titleBlock: b, titleExtraParagraphs: paras.slice(1) };
+        return { title: '(sin título)', titleBlock: b, titleExtraParagraphs: [] };
       }
     }
     for (const b of blocks) {
-      const t = OoxmlUtils.blockJoinedText(b.text).trim();
-      if (t) return { title: t, titleBlock: b };
+      const paras = shapeParagraphs(b.text);
+      if (paras.length) return { title: paras[0].text, titleBlock: b, titleExtraParagraphs: paras.slice(1) };
     }
-    return { title: '(sin título)', titleBlock: null };
+    return { title: '(sin título)', titleBlock: null, titleExtraParagraphs: [] };
   }
 
   function paraText(paraXml) {
@@ -137,22 +167,14 @@
     return texts.join('');
   }
 
-  /** Párrafos de cuerpo de todas las formas de texto de la diapositiva, salvo el título. */
-  function extractParagraphs(slideXml, titleBlock) {
+  /** Párrafos de cuerpo: los del shape de título (salvo el primero, que es
+   * el título) más los de todas las demás formas de texto de la diapositiva. */
+  function extractParagraphs(slideXml, titleBlock, titleExtraParagraphs) {
     const blocks = OoxmlUtils.splitShapeBlocks(slideXml);
-    const paragraphs = [];
+    const paragraphs = [...(titleExtraParagraphs || [])];
     for (const b of blocks) {
       if (titleBlock && b.start === titleBlock.start) continue;
-      const paraRe = /<a:p>([\s\S]*?)<\/a:p>/g;
-      let m;
-      while ((m = paraRe.exec(b.text))) {
-        const text = paraText(m[1]).trim();
-        if (!text) continue;
-        const lvlMatch = m[1].match(/<a:pPr[^>]*\blvl="(\d+)"/);
-        const level = lvlMatch ? Number(lvlMatch[1]) : 0;
-        const bullet = !/<a:buNone/.test(m[1]);
-        paragraphs.push({ text, level, bullet });
-      }
+      paragraphs.push(...shapeParagraphs(b.text));
     }
     return paragraphs;
   }
@@ -218,8 +240,8 @@
    */
   async function extractSlideContent(zip, slidePath) {
     const slideXml = await zip.file(slidePath).async('string');
-    const { title, titleBlock } = extractTitleBlock(slideXml);
-    const paragraphs = extractParagraphs(slideXml, titleBlock);
+    const { title, titleBlock, titleExtraParagraphs } = extractTitleBlock(slideXml);
+    const paragraphs = extractParagraphs(slideXml, titleBlock, titleExtraParagraphs);
     const tables = extractTables(slideXml);
     const images = await extractAllImages(zip, slidePath, slideXml);
     return { title, paragraphs, tables, images };
