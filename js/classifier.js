@@ -1,6 +1,13 @@
 /**
  * Clasificación automática sugerida por keyword matching sobre el título Y
  * el texto interno de cada diapositiva, con un score de confianza.
+ *
+ * Las 6 secciones y su orden salen del archivo base real que usan las 8
+ * plantas para armar su informe mensual
+ * (2025_Inf_SOP_base_para_todas_las_plantas.pptx): ese archivo trae, en
+ * este orden exacto, un ejemplo de cada tipo de diapositiva que una planta
+ * completa — Capacidad, KPIs, Informe de Faltantes, Lanzamientos, BO /
+ * Crítico, Materias Primas e Insumos. No son categorías inventadas.
  */
 
 (function (root, factory) {
@@ -8,14 +15,19 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = mod;
   if (typeof window !== 'undefined') window.Classifier = mod;
 })(typeof self !== 'undefined' ? self : this, function () {
-  // Orden fijo de la agenda: define el orden de las secciones en la vista
-  // consolidada y dónde se inserta cada divisoria.
+  // Orden fijo de la agenda (igual al del archivo base): define el orden
+  // de las secciones en la vista consolidada y dónde se inserta cada
+  // divisoria. Los colores se mantienen dentro de la familia corporativa
+  // (verdes/teales reales) salvo BO / Crítico, que usa rojo como color
+  // semántico de alerta — no de marca — para que lo crítico salte a la
+  // vista.
   const SECTIONS = [
-    { id: 'bo', label: 'BO / Críticos', color: '#2E9150', keywords: ['bo', 'crítico', 'critico', 'back order'] },
-    { id: 'faltantes', label: 'Informe de Faltantes', color: '#00707A', keywords: ['faltante', 'rechazo', 'liberación', 'liberacion'] },
-    { id: 'lanzamientos', label: 'Lanzamientos', color: '#D69A1F', keywords: ['lanzamiento', 'fecha estimada'] },
-    { id: 'temas', label: 'Temas pendientes en Log de acciones', color: '#7A5CC7', keywords: ['temas pendientes', 'log de acciones', 'materias primas'] },
-    { id: 'kpis', label: 'KPIs / Capacidad', color: '#C0392B', keywords: ['kpi', 'capacidad', 'indicador'] },
+    { id: 'capacidad', label: 'Capacidad', color: '#00A650', keywords: ['capacidad', 'desvío', 'desvios', 'desvíos', 'ocupación', 'ocupacion'] },
+    { id: 'kpis', label: 'KPIs', color: '#009045', keywords: ['kpi', 'kpis', 'indicador', 'otif', 'ppa', 'pca', 'aca'] },
+    { id: 'faltantes', label: 'Informe de Faltantes', color: '#00AC9C', keywords: ['faltante', 'rechazo', 'liberación', 'liberacion'] },
+    { id: 'lanzamientos', label: 'Lanzamientos', color: '#007C6B', keywords: ['lanzamiento', 'acondicionado', 'cuarentena', 'cambio de fórmula', 'cambio de formula'] },
+    { id: 'bo', label: 'BO / Crítico', color: '#C0392B', keywords: ['bo', 'crítico', 'critico', 'back order'] },
+    { id: 'materias_primas', label: 'Materias Primas e Insumos', color: '#5C7D67', keywords: ['materias primas', 'materia prima', 'insumos', 'abastecimiento', 'embarque'] },
   ];
   const UNCLASSIFIED = 'sin_clasificar';
   const UNCLASSIFIED_LABEL = 'Sin clasificar';

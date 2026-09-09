@@ -11,6 +11,17 @@ la sesión de uso. Nada se sube a ningún servidor.
 editable, exportable a PDF, y que se puede reabrir y seguir editando (ver
 *Por qué HTML y no PPTX* más abajo).
 
+**Identidad visual**: colores, tipografía y logo salen directamente del
+archivo base real que usan las 8 plantas para armar su informe mensual
+(`2025_Inf_SOP_base_para_todas_las_plantas.pptx`), no son un diseño
+inventado — verde `#009045`, teal `#00AC9C`, tipografía Barlow para
+títulos (la que usa el archivo base) e IBM Plex Sans para el cuerpo, y el
+isotipo real de Megalabs (`assets/megalabs-logo.png`) en el encabezado.
+Las 6 secciones y su orden (Capacidad, KPIs, Informe de Faltantes,
+Lanzamientos, BO / Crítico, Materias Primas e Insumos) también salen de
+ese mismo archivo: trae, en ese orden exacto, un ejemplo de cada tipo de
+diapositiva que una planta completa mes a mes.
+
 ## Flujo de uso mensual
 
 1. **Abrí la herramienta** (URL de Netlify) y arrastrá hasta 8 archivos
@@ -29,8 +40,10 @@ editable, exportable a PDF, y que se puede reabrir y seguir editando (ver
    consolidado**. La herramienta extrae el contenido completo de cada
    diapositiva incluida (título, texto con sus niveles de viñeta, tablas,
    imágenes) y arma la **vista consolidada**: una tarjeta por diapositiva,
-   agrupadas por sección (BO/Críticos, Informe de Faltantes, Lanzamientos,
-   Temas pendientes, KPIs/Capacidad, y Sin clasificar al final) con una
+   agrupadas por sección (Capacidad, KPIs, Informe de Faltantes,
+   Lanzamientos, BO / Crítico, Materias Primas e Insumos, y Sin clasificar
+   al final — el mismo orden y las mismas 6 secciones que trae el archivo
+   base que usan las 8 plantas para armar su informe mensual) con una
    divisoria grande antes de cada sección — la clasificación se sugiere
    automáticamente por palabras clave en el título/texto de cada
    diapositiva.
@@ -135,10 +148,12 @@ Sitio estático (HTML/CSS/JS, sin build step) para desplegar en Netlify.
   `extractSlideContent(zip, slidePath)` que devuelve título, párrafos (con
   nivel de viñeta), tablas (como matriz de celdas) e imágenes (como `data:`
   URLs en base64) de una diapositiva.
-- **`js/classifier.js`**: clasifica cada diapositiva en una de 5 secciones
-  fijas por coincidencia de palabras clave en su título/texto, con un nivel
-  de confianza. Puramente para sugerir un orden inicial — el usuario puede
-  corregirlo arrastrando tarjetas en la vista consolidada.
+- **`js/classifier.js`**: clasifica cada diapositiva en una de las 6
+  secciones fijas del archivo base (Capacidad, KPIs, Informe de Faltantes,
+  Lanzamientos, BO / Crítico, Materias Primas e Insumos) por coincidencia
+  de palabras clave en su título/texto, con un nivel de confianza.
+  Puramente para sugerir un orden inicial — el usuario puede corregirlo
+  arrastrando tarjetas en la vista consolidada.
 - **`js/editable-view.js`**: arma el HTML de cada tarjeta (divisoria de
   sección / diapositiva) y maneja toda la interacción — edición inline
   (`contenteditable`), duplicar/eliminar/agregar tarjeta, drag & drop para
