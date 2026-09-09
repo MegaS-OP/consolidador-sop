@@ -11,16 +11,23 @@ la sesión de uso. Nada se sube a ningún servidor.
 editable, exportable a PDF, y que se puede reabrir y seguir editando (ver
 *Por qué HTML y no PPTX* más abajo).
 
-**Identidad visual**: colores, tipografía y logo salen directamente del
-archivo base real que usan las 8 plantas para armar su informe mensual
-(`2025_Inf_SOP_base_para_todas_las_plantas.pptx`), no son un diseño
-inventado — verde `#009045`, teal `#00AC9C`, tipografía Barlow para
-títulos (la que usa el archivo base) e IBM Plex Sans para el cuerpo, y el
-isotipo real de Megalabs (`assets/megalabs-logo.png`) en el encabezado.
-Las 6 secciones y su orden (Capacidad, KPIs, Informe de Faltantes,
-Lanzamientos, BO / Crítico, Materias Primas e Insumos) también salen de
-ese mismo archivo: trae, en ese orden exacto, un ejemplo de cada tipo de
-diapositiva que una planta completa mes a mes.
+**Identidad visual**: colores, tipografía, logo y portada salen
+directamente del archivo base real que usan las 8 plantas para armar su
+informe mensual (`2025_Inf_SOP_base_para_todas_las_plantas.pptx`), no son
+un diseño inventado — verde `#009045`, teal `#00AC9C`, tipografía Barlow
+para títulos (la que usa el archivo base) e IBM Plex Sans para el cuerpo,
+el isotipo real de Megalabs en el encabezado, y la portada del consolidado
+recrea la portada real (las mismas dos fotos + el isotipo + "S&OP
+Ciclo:") con el mes/año que cargues cada vez.
+
+**El agrupamiento es por planta, no por tema**: el consolidado trae una
+divisoria grande por cada planta (nunca una carátula por sección/tema como
+"Capacidad" o "KPIs"), y cada planta conserva el orden real de sus
+diapositivas — sin reordenarlas ni mezclarlas con las de otra planta.
+Cada tarjeta sí muestra una etiqueta de sección de referencia (Capacidad,
+KPIs, Informe de Faltantes, Lanzamientos, BO / Crítico, Materias Primas e
+Insumos — las 6 secciones y su orden salen del mismo archivo base) para
+ubicarse rápido, pero es sólo eso, una etiqueta: no agrupa ni reordena.
 
 ## Flujo de uso mensual
 
@@ -39,21 +46,19 @@ diapositiva que una planta completa mes a mes.
 4. Completá **Mes / Año** (ej. "Septiembre 2026") y hacé clic en **Generar
    consolidado**. La herramienta extrae el contenido completo de cada
    diapositiva incluida (título, texto con sus niveles de viñeta, tablas,
-   imágenes) y arma la **vista consolidada**: una tarjeta por diapositiva,
-   agrupadas por sección (Capacidad, KPIs, Informe de Faltantes,
-   Lanzamientos, BO / Crítico, Materias Primas e Insumos, y Sin clasificar
-   al final — el mismo orden y las mismas 6 secciones que trae el archivo
-   base que usan las 8 plantas para armar su informe mensual) con una
-   divisoria grande antes de cada sección — la clasificación se sugiere
-   automáticamente por palabras clave en el título/texto de cada
-   diapositiva.
+   imágenes) y arma la **vista consolidada**: primero la portada (con el
+   ciclo que acabás de completar), y después, por cada planta en el orden
+   elegido, una divisoria grande con el nombre de la planta seguida de
+   todas sus diapositivas incluidas, en su orden real — nunca mezcladas
+   con las de otra planta.
 5. **Editá la vista consolidada** directamente en el navegador:
-   - Cualquier texto (títulos, viñetas, celdas de tabla, el título de una
-     divisoria de sección) es editable haciendo clic sobre él.
-   - Cada tarjeta tiene botones para **duplicarla** o **eliminarla**.
-   - **Arrastrá tarjetas** para reordenarlas — incluso de una sección a
-     otra, para corregir una clasificación automática que no quedó bien
-     (la tarjeta adopta el color/etiqueta de la sección donde queda).
+   - Cualquier texto (títulos, viñetas, celdas de tabla, el nombre de una
+     planta, el texto de la portada) es editable haciendo clic sobre él.
+   - Cada tarjeta de diapositiva tiene botones para **duplicarla** o
+     **eliminarla**.
+   - **Arrastrá tarjetas** para reordenarlas — incluso de una planta a
+     otra, para corregir a mano una diapositiva mal ubicada (la tarjeta
+     adopta el nombre de la planta donde queda).
    - **+ Nota** agrega una tarjeta en blanco para agregar un comentario
      manual que no vino de ninguna planta.
    - Alterná entre vista **Vertical** (todas las tarjetas en una lista, para
@@ -148,27 +153,29 @@ Sitio estático (HTML/CSS/JS, sin build step) para desplegar en Netlify.
   `extractSlideContent(zip, slidePath)` que devuelve título, párrafos (con
   nivel de viñeta), tablas (como matriz de celdas) e imágenes (como `data:`
   URLs en base64) de una diapositiva.
-- **`js/classifier.js`**: clasifica cada diapositiva en una de las 6
+- **`js/classifier.js`**: sugiere, para cada diapositiva, una de las 6
   secciones fijas del archivo base (Capacidad, KPIs, Informe de Faltantes,
   Lanzamientos, BO / Crítico, Materias Primas e Insumos) por coincidencia
-  de palabras clave en su título/texto, con un nivel de confianza.
-  Puramente para sugerir un orden inicial — el usuario puede corregirlo
-  arrastrando tarjetas en la vista consolidada.
-- **`js/editable-view.js`**: arma el HTML de cada tarjeta (divisoria de
-  sección / diapositiva) y maneja toda la interacción — edición inline
-  (`contenteditable`), duplicar/eliminar/agregar tarjeta, drag & drop para
-  reordenar (recalculando a qué sección pertenece cada tarjeta según la
-  divisoria más cercana hacia arriba), y el toggle entre vista vertical y
-  modo presentación. Sin dependencias externas (ni JSZip ni el resto de la
-  app): el mismo archivo se usa en la app en vivo y se embebe, inline,
-  dentro del HTML exportado, para que ese archivo suelto siga siendo
-  interactivo sin depender de este sitio.
+  de palabras clave en su título/texto, con un nivel de confianza. Es sólo
+  una etiqueta de referencia en cada tarjeta — **no agrupa nada**: el
+  agrupamiento real de la vista consolidada es por planta.
+- **`js/editable-view.js`**: arma el HTML de cada tarjeta (portada /
+  divisoria de planta / diapositiva) y maneja toda la interacción —
+  edición inline (`contenteditable`), duplicar/eliminar/agregar tarjeta,
+  drag & drop para reordenar (recalculando a qué planta pertenece cada
+  tarjeta según la divisoria de planta más cercana hacia arriba), y el
+  toggle entre vista vertical y modo presentación. Sin dependencias
+  externas (ni JSZip ni el resto de la app): el mismo archivo se usa en la
+  app en vivo y se embebe, inline, dentro del HTML exportado, para que ese
+  archivo suelto siga siendo interactivo sin depender de este sitio.
 - **`js/export-html.js`**: arma el string completo del documento HTML
-  autocontenido a exportar (CSS y `editable-view.js` inline, más un
-  bootstrap que re-conecta los botones al abrir el archivo).
+  autocontenido a exportar (CSS y `editable-view.js` inline, el logo y las
+  fotos de portada embebidos en base64, más un bootstrap que re-conecta
+  los botones al abrir el archivo).
 - **`js/app.js`**: conecta todo — pantalla de carga, tablero de revisión,
-  generación de la vista consolidada (agrupando las diapositivas incluidas
-  por sección y llamando a `extractSlideContent` por cada una) y la
+  generación de la vista consolidada (portada + una divisoria por planta,
+  en el orden elegido, seguida de las diapositivas incluidas de esa planta
+  en su orden real, llamando a `extractSlideContent` por cada una) y la
   descarga del HTML final.
 
 ## Limitaciones conocidas

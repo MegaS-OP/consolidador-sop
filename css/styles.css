@@ -509,24 +509,71 @@ main#app { max-width: 1180px; margin: 0 auto; padding: 32px 24px 80px; }
 }
 
 .consolidated-list.mode-present .slide-card,
-.consolidated-list.mode-present .divider-card {
+.consolidated-list.mode-present .divider-card,
+.consolidated-list.mode-present .cover-card {
   display: none;
 }
 .consolidated-list.mode-present .slide-card.present-active,
-.consolidated-list.mode-present .divider-card.present-active {
+.consolidated-list.mode-present .divider-card.present-active,
+.consolidated-list.mode-present .cover-card.present-active {
   display: flex;
 }
 
-/* ---- Tarjeta divisoria de sección ---- */
+/* ---- Portada (una sola vez, al principio) ---- */
 
-.divider-card {
-  --section-color: #9aa39c;
+.cover-card {
   aspect-ratio: 16 / 9;
   width: 100%;
   max-width: 1100px;
   margin: 0 auto;
   border-radius: var(--radius);
-  background: linear-gradient(135deg, var(--section-color), var(--ink));
+  overflow: hidden;
+  box-shadow: var(--shadow-lift);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+}
+
+.cover-photos { position: relative; flex: 0 0 58%; overflow: hidden; }
+.cover-photo { position: absolute; inset: 0; background-size: cover; background-position: center; }
+.cover-photo-left { clip-path: polygon(0 0, 58% 0, 40% 100%, 0 100%); }
+.cover-photo-right { clip-path: polygon(58% 0, 100% 0, 100% 100%, 40% 100%); }
+
+.cover-bottom { flex: 1; display: flex; align-items: stretch; }
+.cover-logo-wrap { flex: 1; display: flex; align-items: center; padding: 0 5%; }
+.cover-logo { width: min(220px, 34%); height: auto; }
+
+.cover-panel {
+  flex: 0 0 46%;
+  background: linear-gradient(135deg, var(--primary), var(--teal-dark));
+  border-top-left-radius: 15%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: 4% 7%;
+  color: #fff;
+}
+.cover-ciclo {
+  font-family: var(--font-head);
+  font-size: clamp(16px, 2.4vw, 26px);
+  font-weight: 700;
+  margin: 0;
+  outline: none;
+}
+.cover-ciclo:focus { outline: 2px dashed rgba(255, 255, 255, 0.6); outline-offset: 4px; }
+.cover-sub { font-family: var(--font-body); font-size: clamp(11px, 1.3vw, 14px); margin: 0; opacity: 0.92; outline: none; }
+.cover-sub:focus { outline: 1px dashed rgba(255, 255, 255, 0.6); }
+
+/* ---- Divisoria de planta (una por planta, no por tema) ---- */
+
+.divider-card {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--primary), var(--ink));
   color: #fff;
   display: flex;
   align-items: center;
@@ -697,7 +744,7 @@ main#app { max-width: 1180px; margin: 0 auto; padding: 32px 24px 80px; }
   .no-print, .topbar, .consolidated-toolbar { display: none !important; }
   main#app { max-width: none; padding: 0; margin: 0; }
   .consolidated-list { gap: 0; }
-  .slide-card, .divider-card {
+  .slide-card, .divider-card, .cover-card {
     aspect-ratio: auto;
     width: 100vw;
     height: 100vh;
@@ -708,7 +755,8 @@ main#app { max-width: 1180px; margin: 0 auto; padding: 32px 24px 80px; }
     break-after: page;
   }
   .consolidated-list.mode-present .slide-card,
-  .consolidated-list.mode-present .divider-card {
+  .consolidated-list.mode-present .divider-card,
+  .consolidated-list.mode-present .cover-card {
     display: flex !important;
   }
   .slide-card-body { overflow: visible; }

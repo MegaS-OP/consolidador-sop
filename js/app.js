@@ -290,11 +290,13 @@
     return s.trim().replace(/\s+/g, '_').replace(/[^\w\-]/g, '');
   }
 
-  /** Orden fijo de secciones para agrupar + divisorias; null = "Sin clasificar", siempre al final. */
-  function sectionGroupOrder() {
-    return [...Classifier.SECTIONS.map((s) => s.id), null];
-  }
-
+  /**
+   * Agrupa SIEMPRE por planta (una divisoria grande por planta, en el
+   * orden elegido en "Orden de plantas"), nunca por sección/tema — cada
+   * diapositiva conserva el orden real que tenía en el .pptx de su
+   * planta. La sección sugerida por el clasificador viaja igual en cada
+   * tarjeta, pero sólo como etiqueta de referencia (no reagrupa nada).
+   */
   async function generateConsolidated() {
     const mesAnio = mesAnioInput.value.trim();
     if (!mesAnio) return;
@@ -303,31 +305,26 @@
     const statusEl = $('#generatingStatus');
 
     try {
-      const cards = [];
+      const cards = [{ type: 'cover', cicloLabel: `S&OP Ciclo: ${mesAnio}` }];
 
-      for (const secId of sectionGroupOrder()) {
-        const secMeta = Classifier.sectionMeta(secId);
-        const slidesInSection = state.slides
-          .filter((s) => !s.excluded && s.sectionId === secId)
-          .sort((a, b) => {
-            const pa = state.plantOrder.indexOf(a.plantId);
-            const pb = state.plantOrder.indexOf(b.plantId);
-            if (pa !== pb) return pa - pb;
-            return a.orderIndex - b.orderIndex;
-          });
-        if (!slidesInSection.length) continue;
+      for (const pid of state.plantOrder) {
+        const plant = plantById(pid);
+        const slidesOfPlant = state.slides
+          .filter((s) => !s.excluded && s.plantId === pid)
+          .sort((a, b) => a.orderIndex - b.orderIndex);
+        if (!slidesOfPlant.length) continue;
 
-        cards.push({ type: 'divider', sectionId: secId || '', label: secMeta.label, color: secMeta.color });
+        cards.push({ type: 'divider', label: plant.label });
 
-        for (const slide of slidesInSection) {
-          const plant = plantById(slide.plantId);
+        for (const slide of slidesOfPlant) {
           statusEl.textContent = `Extrayendo "${slide.title}" (${plant.label})…`;
           const content = await PptxParser.extractSlideContent(plant.zip, slide.slidePath);
+          const secMeta = Classifier.sectionMeta(slide.sectionId);
           cards.push({
             type: 'slide',
             uid: slide.uid,
             plantLabel: plant.label,
-            sectionId: secId || '',
+            sectionId: slide.sectionId || '',
             sectionLabel: secMeta.label,
             sectionColor: secMeta.color,
             title: content.title,

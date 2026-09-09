@@ -1,8 +1,14 @@
 /**
- * Vista consolidada editable: renderiza tarjetas de diapositiva y
- * divisorias de sección, y maneja toda la interacción (edición inline,
- * eliminar/duplicar/agregar, drag&drop para reordenar, alternar vista
- * vertical/presentación, navegación en modo presentación).
+ * Vista consolidada editable: renderiza la portada, las divisorias de
+ * planta y las tarjetas de diapositiva, y maneja toda la interacción
+ * (edición inline, eliminar/duplicar/agregar, drag&drop para reordenar,
+ * alternar vista vertical/presentación, navegación en modo presentación).
+ *
+ * El agrupamiento es SIEMPRE por planta (una divisoria grande por planta,
+ * nunca por tema/sección) — cada diapositiva conserva el orden real que
+ * tenía en el .pptx de su planta. La sección sugerida por el clasificador
+ * se muestra sólo como una etiqueta de referencia en cada tarjeta, no
+ * determina el agrupamiento.
  *
  * Deliberadamente sin dependencias de JSZip/OoxmlUtils/Classifier ni de
  * ningún estado externo: todo lo que necesita para funcionar vive en el
@@ -29,10 +35,32 @@
 
   // ---------- Construcción de tarjetas ----------
 
+  /** Divisoria grande de PLANTA (no de sección/tema). */
   function buildDividerCardHtml(card) {
     return (
-      `<section class="divider-card" data-uid="${card.uid || uid()}" data-type="divider" data-section="${card.sectionId || ''}" style="--section-color:${card.color}">` +
+      `<section class="divider-card" data-uid="${card.uid || uid()}" data-type="divider">` +
       `<h2 contenteditable="true">${escapeHtml(card.label)}</h2>` +
+      `</section>`
+    );
+  }
+
+  /** Portada fija del informe (una sola vez, al principio): fotos + logo +
+   * ciclo, igual a la portada real del archivo base de todas las plantas. */
+  function buildCoverCardHtml(card) {
+    return (
+      `<section class="cover-card" data-uid="${card.uid || uid()}" data-type="cover">` +
+      `<div class="cover-photos">` +
+      `<div class="cover-photo cover-photo-left" style="background-image:url('assets/cover-building.jpg')"></div>` +
+      `<div class="cover-photo cover-photo-right" style="background-image:url('assets/cover-sign.jpg')"></div>` +
+      `</div>` +
+      `<div class="cover-bottom">` +
+      `<div class="cover-logo-wrap"><img class="cover-logo" src="assets/megalabs-logo-full.png" alt="Megalabs" /></div>` +
+      `<div class="cover-panel">` +
+      `<p class="cover-ciclo" contenteditable="true">${escapeHtml(card.cicloLabel || 'S&OP Ciclo:')}</p>` +
+      `<p class="cover-sub" contenteditable="true">Informe de plantas productivas</p>` +
+      `<p class="cover-sub" contenteditable="true">Reunión de suministro</p>` +
+      `</div>` +
+      `</div>` +
       `</section>`
     );
   }
@@ -105,31 +133,39 @@
     });
   }
 
-  /** Renderiza el listado completo de tarjetas (dividers + slides) en `container`. */
+  /** Renderiza el listado completo de tarjetas (portada + divisorias de planta + slides) en `container`. */
   function renderConsolidatedView(container, cards) {
     container.innerHTML = cards
-      .map((c) => (c.type === 'divider' ? buildDividerCardHtml(c) : buildSlideCardHtml(c)))
+      .map((c) => {
+        if (c.type === 'cover') return buildCoverCardHtml(c);
+        if (c.type === 'divider') return buildDividerCardHtml(c);
+        return buildSlideCardHtml(c);
+      })
       .join('');
   }
 
   // ---------- Interacción (funciona igual en vivo y en el .html exportado) ----------
 
-  function recomputeSectionsFromDividers(container) {
+  /** Al reordenar con drag&drop, una tarjeta arrastrada debajo de otra
+   * divisoria de planta pasa a mostrar esa planta en su etiqueta — así se
+   * puede corregir a mano una diapositiva mal ubicada. La sección sugerida
+   * de cada tarjeta NO se toca acá: es una propiedad del contenido, no de
+   * su posición. */
+  function recomputePlantsFromDividers(container) {
     let current = null;
     for (const el of container.children) {
-      if (el.dataset.type === 'divider') {
-        current = {
-          id: el.dataset.section,
-          label: el.querySelector('h2')?.textContent.trim() || '',
-          color: el.style.getPropertyValue('--section-color'),
-        };
+      if (el.dataset.type === 'cover') {
+        current = null;
         continue;
       }
-      if (el.dataset.type === 'slide' && current) {
-        el.dataset.section = current.id;
-        el.style.setProperty('--section-color', current.color);
-        const badge = el.querySelector('.slide-card-badge');
-        if (badge) badge.textContent = current.label;
+      if (el.dataset.type === 'divider') {
+        current = el.querySelector('h2')?.textContent.trim() || '';
+        continue;
+      }
+      if (el.dataset.type === 'slide' && current !== null) {
+        el.dataset.plant = current;
+        const badge = el.querySelector('.slide-card-plant');
+        if (badge) badge.textContent = current;
       }
     }
   }
@@ -145,7 +181,7 @@
       if (!card) return;
       if (btn.dataset.action === 'delete') {
         card.remove();
-        recomputeSectionsFromDividers(container);
+        recomputePlantsFromDividers(container);
       } else if (btn.dataset.action === 'duplicate') {
         const clone = card.cloneNode(true);
         clone.dataset.uid = uid();
@@ -161,7 +197,7 @@
         wrap.innerHTML = buildBlankSlideCardHtml();
         const el = wrap.firstElementChild;
         container.appendChild(el);
-        recomputeSectionsFromDividers(container);
+        recomputePlantsFromDividers(container);
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       });
     }
@@ -184,7 +220,7 @@
     container.addEventListener('dragend', () => {
       if (dragEl) dragEl.classList.remove('dragging');
       dragEl = null;
-      recomputeSectionsFromDividers(container);
+      recomputePlantsFromDividers(container);
     });
     container.addEventListener('dragover', (e) => {
       if (!dragEl) return;
@@ -250,5 +286,5 @@
     return { setMode };
   }
 
-  return { renderConsolidatedView, wireInteractions, buildSlideCardHtml, buildDividerCardHtml, escapeHtml };
+  return { renderConsolidatedView, wireInteractions, buildSlideCardHtml, buildDividerCardHtml, buildCoverCardHtml, escapeHtml };
 });
