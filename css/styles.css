@@ -72,6 +72,7 @@ button { font-family: var(--font-body); }
 }
 
 .topbar-actions { display: flex; align-items: center; gap: 16px; }
+.topbar-actions[hidden] { display: none; }
 
 .field-inline {
   display: flex;
