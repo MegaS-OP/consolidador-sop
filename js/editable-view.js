@@ -80,7 +80,9 @@
         const rows = t.rows
           .map((row) => `<tr>${row.map((cell) => `<td contenteditable="true">${escapeHtml(cell)}</td>`).join('')}</tr>`)
           .join('');
-        return `<table class="slide-card-table">${rows}</table>`;
+        // El wrap es lo que participa del layout (flex/overflow); la
+        // tabla en sí es lo que se escala para entrar — ver fitWideTables.
+        return `<div class="slide-card-table-wrap"><table class="slide-card-table">${rows}</table></div>`;
       })
       .join('');
   }
@@ -92,21 +94,50 @@
       .join('');
   }
 
+  function paragraphsCharCount(paragraphs) {
+    return (paragraphs || []).reduce((n, p) => n + (p.text ? p.text.length : 0), 0);
+  }
+
   function buildSlideCardHtml(card) {
     const hasImages = card.images && card.images.length > 0;
-    const hasText = Boolean(card.paragraphs?.length || card.tables?.length);
-    const body =
-      buildParagraphsHtml(card.paragraphs) +
-      buildTablesHtml(card.tables) +
-      (!hasText ? '<p class="slide-card-empty-hint">(sin texto)</p>' : '');
+    const hasTables = card.tables && card.tables.length > 0;
+    const hasText = Boolean(card.paragraphs?.length);
+    const hasAnyBody = hasText || hasTables || hasImages;
 
-    // Sin texto de cuerpo (sólo el título) + imágenes: la columna de texto
-    // sobra, así que las imágenes pasan a ocupar todo el ancho de la
-    // tarjeta en vez de aplastarse en la columna angosta de siempre — es
-    // el caso típico de una diapositiva que es, en los hechos, una captura
-    // pegada (una tabla de Excel, un dashboard) en vez de texto nativo.
-    let bodyClass = ' no-image';
-    if (hasImages) bodyClass = hasText ? '' : ' images-only';
+    // "Ancha": cuando el texto de cuerpo es poco o nulo (un rótulo corto
+    // tipo "Detalle de los PT faltante:") y hay una imagen y/o tabla real,
+    // esa imagen/tabla ES en los hechos el contenido de la diapositiva —
+    // usa todo el ancho de la tarjeta (y toda la tabla se escala para
+    // entrar completa, sin scroll) en vez de aplastarse en una columna al
+    // costado de un texto que casi no existe. Con texto de verdad, se
+    // mantiene el layout de dos columnas de siempre.
+    const substantialText = paragraphsCharCount(card.paragraphs) > 220;
+    const wide = !substantialText && (hasImages || hasTables);
+
+    let bodyClass;
+    let bodyHtml;
+
+    if (wide) {
+      bodyClass = ' wide-content';
+      bodyHtml =
+        `<div class="slide-card-text">` +
+        `<h3 class="slide-card-title" contenteditable="true">${escapeHtml(card.title)}</h3>` +
+        buildParagraphsHtml(card.paragraphs) +
+        `</div>` +
+        `<div class="slide-card-wide">${buildTablesHtml(card.tables)}${buildImagesHtml(card.images)}</div>`;
+    } else {
+      bodyClass = hasAnyBody ? '' : ' no-image';
+      const textBody =
+        buildParagraphsHtml(card.paragraphs) +
+        buildTablesHtml(card.tables) +
+        (!hasText && !hasTables ? '<p class="slide-card-empty-hint">(sin texto)</p>' : '');
+      bodyHtml =
+        `<div class="slide-card-text">` +
+        `<h3 class="slide-card-title" contenteditable="true">${escapeHtml(card.title)}</h3>` +
+        textBody +
+        `</div>` +
+        (hasImages ? `<div class="slide-card-images">${buildImagesHtml(card.images)}</div>` : '');
+    }
 
     return (
       `<section class="slide-card" data-uid="${card.uid || uid()}" data-type="slide" data-section="${card.sectionId || ''}" style="--section-color:${card.sectionColor}">` +
@@ -119,13 +150,7 @@
       `<button type="button" class="card-btn" data-action="delete" title="Eliminar">×</button>` +
       `</div>` +
       `</header>` +
-      `<div class="slide-card-body${bodyClass}">` +
-      `<div class="slide-card-text">` +
-      `<h3 class="slide-card-title" contenteditable="true">${escapeHtml(card.title)}</h3>` +
-      body +
-      `</div>` +
-      (hasImages ? `<div class="slide-card-images">${buildImagesHtml(card.images)}</div>` : '') +
-      `</div>` +
+      `<div class="slide-card-body${bodyClass}">${bodyHtml}</div>` +
       `</section>`
     );
   }
@@ -153,6 +178,50 @@
         return buildSlideCardHtml(c);
       })
       .join('');
+    refitWideTablesSoon(container);
+  }
+
+  /**
+   * fitWideTables ya fuerza layout síncrono (getBoundingClientRect), pero
+   * en una tanda grande recién insertada (decenas de tarjetas) el primer
+   * pase puede tomar una medida que todavía no asentó del todo — y si
+   * después terminan de cargar las tipografías web, el ancho del texto
+   * puede correrse. Por eso se repite el ajuste un par de veces más (un
+   * frame después, y cuando las fuentes terminan de cargar) en vez de
+   * confiar en un único pase síncrono.
+   */
+  function refitWideTablesSoon(container) {
+    fitWideTables(container);
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => requestAnimationFrame(() => fitWideTables(container)));
+    }
+    if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => fitWideTables(container));
+    }
+  }
+
+  /**
+   * Las tablas en layout "ancho" (.slide-card-wide) se dejan medir a su
+   * tamaño natural sin achicarse (ver CSS: width:max-content, sin wrap) y
+   * acá se escalan como una unidad (transform: scale, sin recortar texto
+   * ni reflowear celdas) para entrar completas en el espacio disponible
+   * de la tarjeta — el mismo efecto que "ajustar a la hoja" al imprimir
+   * una planilla. Se vuelve a llamar cada vez que el layout puede haber
+   * cambiado: al renderizar, al agregar/duplicar una tarjeta, al editar
+   * una celda, al cambiar el tamaño de ventana, y justo antes de imprimir.
+   */
+  function fitWideTables(container) {
+    const wraps = container.querySelectorAll('.slide-card-wide .slide-card-table-wrap');
+    wraps.forEach((wrap) => {
+      const table = wrap.querySelector('.slide-card-table');
+      if (!table) return;
+      table.style.transform = 'none';
+      const wrapRect = wrap.getBoundingClientRect();
+      const tableRect = table.getBoundingClientRect();
+      if (!wrapRect.width || !wrapRect.height || !tableRect.width || !tableRect.height) return;
+      const scale = Math.min(1, wrapRect.width / tableRect.width, wrapRect.height / tableRect.height);
+      table.style.transform = scale < 1 ? `scale(${scale})` : 'none';
+    });
   }
 
   // ---------- Interacción (funciona igual en vivo y en el .html exportado) ----------
@@ -231,6 +300,7 @@
         const clone = card.cloneNode(true);
         clone.dataset.uid = uid();
         card.after(clone);
+        refitWideTablesSoon(container);
       }
     });
 
@@ -246,6 +316,19 @@
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       });
     }
+
+    // ---- Reajustar tablas anchas al editar una celda, cambiar el tamaño
+    // de la ventana, o justo antes de imprimir/exportar a PDF ----
+    let fitTablesTimer = null;
+    function scheduleFitWideTables() {
+      clearTimeout(fitTablesTimer);
+      fitTablesTimer = setTimeout(() => fitWideTables(container), 200);
+    }
+    container.addEventListener('input', (e) => {
+      if (e.target.closest('.slide-card-wide .slide-card-table')) scheduleFitWideTables();
+    });
+    window.addEventListener('resize', scheduleFitWideTables);
+    window.addEventListener('beforeprint', () => fitWideTables(container));
 
     // ---- Drag & drop para reordenar (incluso entre secciones) ----
     let dragEl = null;

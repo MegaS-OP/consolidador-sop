@@ -668,14 +668,47 @@ main#app { max-width: 1180px; margin: 0 auto; padding: 32px 24px 80px; }
    con ella a la imagen (que ya se ve completa, sin necesidad de deslizar). */
 .slide-card-body.no-image { display: block; overflow-y: auto; }
 
-/* Sin texto de cuerpo (sólo título) + imágenes: la columna de texto no
-   suma nada, así que la(s) imagen(es) pasan a ocupar todo el ancho en vez
-   de aplastarse en la columna angosta de siempre — común cuando la
-   diapositiva es, en los hechos, una captura pegada (tabla de Excel,
-   dashboard) en vez de texto nativo. */
-.slide-card-body.images-only { flex-direction: column; }
-.slide-card-body.images-only .slide-card-text { flex: 0 0 auto; }
-.slide-card-body.images-only .slide-card-images { flex: 1; width: 100%; }
+/* Poco o nada de texto de cuerpo + imagen y/o tabla real: esa imagen/tabla
+   ES el contenido de la diapositiva (común cuando en los hechos es una
+   captura pegada — tabla de Excel, dashboard — o una tabla nativa con
+   muchas columnas), así que ocupa todo el ancho de la tarjeta en vez de
+   aplastarse en una columna al costado de un texto que casi no existe. */
+.slide-card-body.wide-content { flex-direction: column; }
+.slide-card-body.wide-content .slide-card-text { flex: 0 0 auto; overflow: visible; }
+.slide-card-wide {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+.slide-card-wide img {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  background: var(--surface);
+}
+.slide-card-wide .slide-card-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+/* La tabla se mide a su tamaño natural (sin achicar columnas ni wrapear
+   celdas) y se escala como una unidad para entrar completa — ver
+   fitWideTables() en editable-view.js. Mismo efecto que "ajustar a la
+   hoja" al imprimir una planilla: se ve todo, más chico, nunca cortado. */
+.slide-card-wide .slide-card-table {
+  width: max-content;
+  white-space: nowrap;
+  transform-origin: top left;
+  margin-bottom: 0;
+}
+.slide-card-wide .slide-card-table td { white-space: nowrap; }
 
 .slide-card-text { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; }
 
