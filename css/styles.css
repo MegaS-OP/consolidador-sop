@@ -721,6 +721,7 @@ main#app { max-width: 1180px; margin: 0 auto; padding: 32px 24px 80px; }
   border-radius: 6px;
 }
 .slide-card-title:focus { outline: 2px dashed var(--primary); outline-offset: 3px; }
+.slide-card-title:empty::before { content: 'Agregar título…'; color: var(--ink-faint); font-weight: 500; }
 
 .slide-card-list { margin: 0 0 12px; padding: 0; list-style: none; }
 .slide-card-list li {
@@ -741,6 +742,24 @@ main#app { max-width: 1180px; margin: 0 auto; padding: 32px 24px 80px; }
 .slide-card-list li.lvl-2 { padding-left: 54px; font-size: 12.5px; }
 .slide-card-list li.lvl-2::before { left: 40px; }
 .slide-card-list li:focus { outline: 1px dashed var(--primary); }
+
+/* Etiqueta o cartel de anotación con fondo de color en el original — se
+   muestra como un recuadro destacado con ese mismo color en vez de un
+   bullet más, para no perder la jerarquía visual que tenía en la
+   diapositiva (p.ej. un cartel verde señalando un cierre de planta). */
+.slide-card-list li.callout {
+  --callout-color: #9aa39c;
+  background: var(--callout-color);
+  background: color-mix(in srgb, var(--callout-color) 16%, white);
+  border-left: 3px solid var(--callout-color);
+  border-radius: 6px;
+  padding: 7px 10px 7px 12px;
+  margin: 6px 0;
+  font-weight: 600;
+}
+.slide-card-list li.callout::before { display: none; }
+.slide-card-list li.callout.lvl-1 { padding-left: 28px; }
+.slide-card-list li.callout.lvl-2 { padding-left: 44px; }
 
 .slide-card-table {
   border-collapse: collapse;

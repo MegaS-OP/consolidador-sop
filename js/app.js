@@ -262,7 +262,7 @@
     card.innerHTML = `
       <button class="mini-card-exclude" title="${slide.excluded ? 'Incluir de nuevo' : 'Excluir del consolidado'}">${slide.excluded ? '↺' : '×'}</button>
       <div class="mini-card-thumb">${thumbHtml}</div>
-      <div class="mini-card-title">${escapeHtml(slide.title)}</div>
+      <div class="mini-card-title">${escapeHtml(slide.title || '(sin título)')}</div>
     `;
 
     card.querySelector('.mini-card-exclude').addEventListener('click', () => {

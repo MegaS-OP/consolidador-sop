@@ -106,6 +106,20 @@
     return paragraphs;
   }
 
+  /**
+   * Color de relleno propio del shape (no el color del texto), si tiene
+   * uno sólido — típico de una etiqueta o un cartel de anotación con
+   * fondo de color (p.ej. "Planta DROMEX" en un rectángulo teal, o un
+   * comentario destacado en un rectángulo verde). Sólo mira el <a:solidFill>
+   * directo de <p:spPr>, nunca el de un <a:rPr> (que sería color de texto).
+   */
+  function shapeFillColor(blockXml) {
+    const spPrMatch = blockXml.match(/<p:spPr>([\s\S]*?)<\/p:spPr>/);
+    if (!spPrMatch) return null;
+    const m = spPrMatch[1].match(/<a:solidFill>\s*<a:srgbClr val="([0-9A-Fa-f]{6})"/);
+    return m ? `#${m[1]}` : null;
+  }
+
   function extractTitle(slideXml) {
     const blocks = OoxmlUtils.splitShapeBlocks(slideXml);
     for (const b of blocks) {
@@ -118,7 +132,7 @@
       const paras = shapeParagraphs(b.text);
       if (paras.length) return paras[0].text;
     }
-    return '(sin título)';
+    return '';
   }
 
   async function extractMainImage(zip, slidePath, slideXml) {
@@ -171,16 +185,22 @@
     const blocks = OoxmlUtils.splitShapeBlocks(slideXml);
     for (const b of blocks) {
       if (/<p:ph\b[^>]*type="(title|ctrTitle)"/.test(b.text)) {
-        const paras = shapeParagraphs(b.text);
+        const paras = tagFillColor(shapeParagraphs(b.text), shapeFillColor(b.text));
         if (paras.length) return { title: paras[0].text, titleBlock: b, titleExtraParagraphs: paras.slice(1) };
-        return { title: '(sin título)', titleBlock: b, titleExtraParagraphs: [] };
+        return { title: '', titleBlock: b, titleExtraParagraphs: [] };
       }
     }
     for (const b of blocks) {
-      const paras = shapeParagraphs(b.text);
+      const paras = tagFillColor(shapeParagraphs(b.text), shapeFillColor(b.text));
       if (paras.length) return { title: paras[0].text, titleBlock: b, titleExtraParagraphs: paras.slice(1) };
     }
-    return { title: '(sin título)', titleBlock: null, titleExtraParagraphs: [] };
+    return { title: '', titleBlock: null, titleExtraParagraphs: [] };
+  }
+
+  /** Marca cada párrafo con el color de fondo de su shape de origen, si tiene uno. */
+  function tagFillColor(paragraphs, fillColor) {
+    if (fillColor) for (const p of paragraphs) p.fillColor = fillColor;
+    return paragraphs;
   }
 
   function paraText(paraXml) {
@@ -192,25 +212,31 @@
   }
 
   /** Párrafos de cuerpo: los del shape de título (salvo el primero, que es
-   * el título) más los de todas las demás formas de texto de la diapositiva. */
+   * el título) más los de todas las demás formas de texto de la diapositiva.
+   * Cada párrafo se marca con el color de fondo de su shape de origen (ver
+   * shapeFillColor) cuando tiene uno — así una etiqueta o un cartel de
+   * anotación con fondo de color no se pierde entre los bullets normales. */
   function extractParagraphs(slideXml, titleBlock, titleExtraParagraphs) {
     const blocks = OoxmlUtils.splitShapeBlocks(slideXml);
     const paragraphs = [...(titleExtraParagraphs || [])];
     for (const b of blocks) {
       if (titleBlock && b.start === titleBlock.start) continue;
-      paragraphs.push(...shapeParagraphs(b.text));
+      paragraphs.push(...tagFillColor(shapeParagraphs(b.text), shapeFillColor(b.text)));
     }
     return paragraphs;
   }
 
-  /** Tablas (<a:tbl>) como matriz de filas/columnas de texto. Simplificación: no resuelve celdas combinadas. */
+  /** Tablas (<a:tbl>) como matriz de filas/columnas de texto. Simplificación: no resuelve celdas combinadas.
+   * Filas y columnas enteramente vacías se descartan — frecuentes cuando la
+   * tabla se usa, en los hechos, como una lista de una sola columna (con
+   * columnas extra en blanco) en vez de una tabla de datos real. */
   function extractTables(slideXml) {
     const tables = [];
     const tblRe = /<a:tbl>[\s\S]*?<\/a:tbl>/g;
     let tblMatch;
     while ((tblMatch = tblRe.exec(slideXml))) {
       const tblXml = tblMatch[0];
-      const rows = [];
+      let rows = [];
       const trRe = /<a:tr\b[^>]*>([\s\S]*?)<\/a:tr>/g;
       let tr;
       while ((tr = trRe.exec(tblXml))) {
@@ -218,9 +244,18 @@
         const tcRe = /<a:tc\b[^>]*>([\s\S]*?)<\/a:tc>/g;
         let tc;
         while ((tc = tcRe.exec(tr[1]))) {
-          cells.push(paraText(tc[1]).trim());
+          cells.push(paraText(tc[1]).replace(/ /g, ' ').trim());
         }
         if (cells.length) rows.push(cells);
+      }
+      rows = rows.filter((row) => row.some((cell) => cell));
+      if (rows.length) {
+        const colCount = Math.max(...rows.map((r) => r.length));
+        const keepCols = [];
+        for (let c = 0; c < colCount; c++) {
+          if (rows.some((row) => row[c])) keepCols.push(c);
+        }
+        rows = rows.map((row) => keepCols.map((c) => row[c] || ''));
       }
       if (rows.length) tables.push({ rows });
     }

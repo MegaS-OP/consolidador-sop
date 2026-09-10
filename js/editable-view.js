@@ -68,7 +68,15 @@
   function buildParagraphsHtml(paragraphs) {
     if (!paragraphs || !paragraphs.length) return '';
     const items = paragraphs
-      .map((p) => `<li class="lvl-${Math.min(p.level || 0, 2)}" contenteditable="true">${escapeHtml(p.text)}</li>`)
+      .map((p) => {
+        // Un párrafo que en el original vivía en un shape con fondo de
+        // color (una etiqueta, un cartel de anotación) se muestra como un
+        // recuadro destacado con ese mismo color, en vez de un bullet más
+        // — así no se pierde la jerarquía visual que tenía en la diapositiva.
+        const cls = p.fillColor ? ' callout' : '';
+        const style = p.fillColor ? ` style="--callout-color:${escapeHtml(p.fillColor)}"` : '';
+        return `<li class="lvl-${Math.min(p.level || 0, 2)}${cls}"${style} contenteditable="true">${escapeHtml(p.text)}</li>`;
+      })
       .join('');
     return `<ul class="slide-card-list">${items}</ul>`;
   }
