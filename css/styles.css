@@ -803,6 +803,27 @@ main#app { max-width: 1180px; margin: 0 auto; padding: 32px 24px 80px; }
 
 .zoomable-image { cursor: zoom-in; }
 
+/* Imagen real (no un logo) que el navegador no puede mostrar (.emf/.wmf)
+   — ocupa el mismo espacio que hubiera ocupado la imagen, para que la
+   tarjeta nunca se vea vacía sin explicación. */
+.slide-card-image-unsupported {
+  flex: 1;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 20px;
+  border: 1.5px dashed var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink-soft);
+}
+.slide-card-image-unsupported-icon { font-size: 22px; color: var(--dudosa); }
+.slide-card-image-unsupported p { margin: 0; font-size: 12px; line-height: 1.5; max-width: 34ch; }
+
 .slide-card-empty-hint {
   color: var(--ink-faint);
   font-size: 12.5px;

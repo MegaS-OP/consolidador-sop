@@ -331,6 +331,7 @@
             paragraphs: content.paragraphs,
             tables: content.tables,
             images: content.images,
+            unsupportedImageCount: content.unsupportedImageCount,
           });
         }
       }

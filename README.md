@@ -183,9 +183,13 @@ Sitio estático (HTML/CSS/JS, sin build step) para desplegar en Netlify.
 - **Tablas**: se extraen como matriz de celdas de texto; no se preservan
   celdas combinadas (`gridSpan`/`rowSpan`) ni el formato de color/relleno
   de la tabla original.
-- **Imágenes EMF/WMF** (frecuentes en gráficos pegados desde Excel) no se
-  pueden mostrar en un navegador y se omiten de la tarjeta — el resto del
-  contenido de esa diapositiva (título, texto, tablas) sí se extrae.
+- **Imágenes EMF/WMF** (frecuentes en tablas/gráficos pegados desde Excel
+  como "Imagen") no se pueden mostrar en un navegador. Se avisa en la
+  propia tarjeta ("No se pudo mostrar una imagen…") en vez de omitirla en
+  silencio, para no dejar una tarjeta vacía sin explicación — el resto
+  del contenido de esa diapositiva (título, texto, tablas nativas) sí se
+  extrae igual. Solución: volver a pegar esa imagen como PNG/JPG en el
+  archivo original.
 - **Gráficos nativos de PowerPoint** (`ppt/charts/...`, no imágenes
   pegadas) y **objetos OLE embebidos** (gráficos de think-cell, hojas de
   cálculo incrustadas) no se renderizan como gráfico — no hay motor de

@@ -262,20 +262,30 @@
     return tables;
   }
 
-  /** Todas las imágenes renderizables de la diapositiva que no sean logo/marca
-   * de agua (ver LOGO_AREA_FRACTION), en orden de aparición. */
+  /**
+   * Todas las imágenes renderizables de la diapositiva que no sean
+   * logo/marca de agua (ver LOGO_AREA_FRACTION), en orden de aparición.
+   * Además cuenta las imágenes que SÍ son contenido real (no logo) pero
+   * están en un formato que el navegador no puede mostrar (típicamente
+   * .emf/.wmf, frecuente en tablas/gráficos pegados desde Excel como
+   * "Imagen" en vez de mantenerlos como tabla u objeto vinculado) — sin
+   * ese conteo, una diapositiva cuyo único contenido es una de estas
+   * imágenes queda con la tarjeta completamente vacía y sin ninguna pista
+   * de por qué.
+   */
   async function extractAllImages(zip, slidePath, slideXml) {
     const relsPath = OoxmlUtils.relsPathFor(slidePath);
     const relsFile = zip.file(relsPath);
-    if (!relsFile) return [];
+    if (!relsFile) return { images: [], unsupportedCount: 0 };
     const rels = OoxmlUtils.parseRels(await relsFile.async('string'));
     const imageRels = new Map(rels.filter((r) => r.type.endsWith('/image')).map((r) => [r.id, r]));
-    if (!imageRels.size) return [];
+    if (!imageRels.size) return { images: [], unsupportedCount: 0 };
 
     const slideSize = await getSlideSize(zip);
     const slideArea = slideSize ? slideSize.cx * slideSize.cy : null;
 
     const images = [];
+    let unsupportedCount = 0;
     const picRe = /<p:pic>[\s\S]*?<\/p:pic>/g;
     let m;
     while ((m = picRe.exec(slideXml))) {
@@ -298,11 +308,14 @@
       if (!imgFile) continue;
       const ext = OoxmlUtils.extname(imgPath);
       const mime = RENDERABLE_MIME[ext];
-      if (!mime) continue; // emf/wmf: no renderizable en <img>, se omite
+      if (!mime) {
+        unsupportedCount++; // emf/wmf: no renderizable en <img>, se avisa en vez de omitir en silencio
+        continue;
+      }
       const base64 = await imgFile.async('base64');
       images.push(`data:${mime};base64,${base64}`);
     }
-    return images;
+    return { images, unsupportedCount };
   }
 
   /**
@@ -316,8 +329,8 @@
     const { title, titleBlock, titleExtraParagraphs } = extractTitleBlock(slideXml);
     const paragraphs = extractParagraphs(slideXml, titleBlock, titleExtraParagraphs);
     const tables = extractTables(slideXml);
-    const images = await extractAllImages(zip, slidePath, slideXml);
-    return { title, paragraphs, tables, images };
+    const { images, unsupportedCount } = await extractAllImages(zip, slidePath, slideXml);
+    return { title, paragraphs, tables, images, unsupportedImageCount: unsupportedCount };
   }
 
   /**

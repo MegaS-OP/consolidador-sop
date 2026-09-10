@@ -102,6 +102,24 @@
       .join('');
   }
 
+  /** Aviso cuando la diapositiva tenía una imagen real (no un logo) en un
+   * formato que el navegador no puede mostrar — típicamente .emf/.wmf,
+   * frecuente cuando una tabla o gráfico se pega como "Imagen" en vez de
+   * mantenerse como tabla. Sin este aviso la tarjeta queda vacía sin
+   * ninguna pista de qué faltó ni por qué. */
+  function buildUnsupportedImagePlaceholder(count) {
+    if (!count) return '';
+    const label = count === 1 ? 'No se pudo mostrar una imagen' : `No se pudieron mostrar ${count} imágenes`;
+    return (
+      `<div class="slide-card-image-unsupported">` +
+      `<span class="slide-card-image-unsupported-icon" aria-hidden="true">⚠</span>` +
+      `<p>${escapeHtml(label)} de esta diapositiva: está en un formato que el navegador no puede mostrar ` +
+      `(.emf/.wmf — común cuando una tabla o gráfico se pega como "Imagen" desde Excel). ` +
+      `Revisá el archivo original, o volvé a pegarla como PNG/JPG para que se vea acá.</p>` +
+      `</div>`
+    );
+  }
+
   function paragraphsCharCount(paragraphs) {
     return (paragraphs || []).reduce((n, p) => n + (p.text ? p.text.length : 0), 0);
   }
@@ -110,7 +128,10 @@
     const hasImages = card.images && card.images.length > 0;
     const hasTables = card.tables && card.tables.length > 0;
     const hasText = Boolean(card.paragraphs?.length);
-    const hasAnyBody = hasText || hasTables || hasImages;
+    const unsupportedCount = card.unsupportedImageCount || 0;
+    const hasUnsupported = unsupportedCount > 0;
+    const hasVisualContent = hasImages || hasUnsupported;
+    const hasAnyBody = hasText || hasTables || hasVisualContent;
 
     // "Ancha": cuando el texto de cuerpo es poco o nulo (un rótulo corto
     // tipo "Detalle de los PT faltante:") y hay una imagen y/o tabla real,
@@ -120,7 +141,7 @@
     // costado de un texto que casi no existe. Con texto de verdad, se
     // mantiene el layout de dos columnas de siempre.
     const substantialText = paragraphsCharCount(card.paragraphs) > 220;
-    const wide = !substantialText && (hasImages || hasTables);
+    const wide = !substantialText && (hasVisualContent || hasTables);
 
     let bodyClass;
     let bodyHtml;
@@ -132,7 +153,7 @@
         `<h3 class="slide-card-title" contenteditable="true">${escapeHtml(card.title)}</h3>` +
         buildParagraphsHtml(card.paragraphs) +
         `</div>` +
-        `<div class="slide-card-wide">${buildTablesHtml(card.tables)}${buildImagesHtml(card.images)}</div>`;
+        `<div class="slide-card-wide">${buildTablesHtml(card.tables)}${buildImagesHtml(card.images)}${buildUnsupportedImagePlaceholder(unsupportedCount)}</div>`;
     } else {
       bodyClass = hasAnyBody ? '' : ' no-image';
       const textBody =
@@ -144,7 +165,7 @@
         `<h3 class="slide-card-title" contenteditable="true">${escapeHtml(card.title)}</h3>` +
         textBody +
         `</div>` +
-        (hasImages ? `<div class="slide-card-images">${buildImagesHtml(card.images)}</div>` : '');
+        (hasVisualContent ? `<div class="slide-card-images">${buildImagesHtml(card.images)}${buildUnsupportedImagePlaceholder(unsupportedCount)}</div>` : '');
     }
 
     return (
